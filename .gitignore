@@ -166,6 +166,7 @@ docs/superpowers/
 # Local workspace metadata & Graphify build outputs
 .agents/
 graphify-out/
-saas-app/dist/
-saas-app/node_modules/
-saas-app/.env
+frontend/dist/
+frontend/node_modules/
+backend/node_modules/
+backend/.env
