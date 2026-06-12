@@ -31,11 +31,16 @@ except ImportError:
     print("Error: matplotlib required. Install with: pip install matplotlib", file=sys.stderr)
     sys.exit(1)
 
+# Prevent WeasyPrint import warnings on Windows from polluting stdout JSON
+_stdout_bak = sys.stdout
+sys.stdout = sys.stderr
 try:
     from weasyprint import HTML
-except ImportError:
-    print("Error: weasyprint required. Install with: pip install weasyprint", file=sys.stderr)
-    sys.exit(1)
+    WEASYPRINT_AVAILABLE = True
+except (ImportError, OSError):
+    WEASYPRINT_AVAILABLE = False
+finally:
+    sys.stdout = _stdout_bak
 
 
 # ─── Brand Colors ────────────────────────────────────────────────────────────
@@ -365,16 +370,70 @@ def chart_index_status(data: dict, output_dir: Path) -> str:
     return str(path)
 
 
+def chart_crawl_categories(data: dict, output_dir: Path) -> str:
+    """Generate horizontal bar chart of category scores for crawl audit."""
+    categories = {
+        "technical": "Technical SEO",
+        "content": "Content Quality",
+        "onpage": "On-Page SEO",
+        "schema": "Schema Markup",
+        "performance": "Performance (CWV)",
+        "geo": "AI Search (GEO)",
+        "images": "Image Optimization"
+    }
+    scores_dict = data.get("categoryScores", {})
+    if not scores_dict:
+        return ""
+
+    labels = []
+    scores = []
+    colors = []
+    for key, label in categories.items():
+        if key in scores_dict:
+            score = scores_dict[key]
+            labels.append(label)
+            scores.append(score)
+            colors.append(_score_color(score))
+
+    if not scores:
+        return ""
+
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    y = range(len(labels))
+    bars = ax.barh(y, scores, color=colors, height=0.5)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=9, fontweight="bold", color=BRAND["dark"])
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("Score", fontsize=10, color=BRAND["muted"])
+    ax.invert_yaxis()
+
+    # Add values to the end of bars
+    for bar, score in zip(bars, scores):
+        ax.text(
+            bar.get_width() + 2,
+            bar.get_y() + bar.get_height() / 2,
+            f"{score}/100",
+            va="center",
+            ha="left",
+            fontsize=9,
+            fontweight="bold",
+            color=BRAND["dark"]
+        )
+
+    plt.tight_layout()
+    path = output_dir / "crawl_categories.png"
+    plt.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
+    plt.close()
+    return str(path)
+
+
 # ─── CSS Template ────────────────────────────────────────────────────────────
 
 def _build_css(domain: str) -> str:
     """
-    Professional A4 report CSS adapted from generate_pdf.py.
-
-    Uses Times New Roman / DejaVu Serif body font. All proven layout classes
-    from the dexdia.com audit report are preserved with the WeasyPrint-safe
-    patterns (div.section for page-break, float:right for badges,
-    display:table for two-column layouts).
+    Professional modern report CSS.
+    Uses clean sans-serif typography, gradients, neon accents, and responsive layout classes.
     """
     return f"""\
   @page {{
@@ -382,21 +441,21 @@ def _build_css(domain: str) -> str:
     margin: 22mm 18mm 25mm 18mm;
     @bottom-center {{
       content: "Page " counter(page) " of " counter(pages);
-      font-size: 9pt;
-      color: #6b7280;
-      font-family: 'DejaVu Serif', 'Times New Roman', Georgia, serif;
+      font-size: 8.5pt;
+      color: #64748b;
+      font-family: system-ui, -apple-system, sans-serif;
     }}
     @bottom-left {{
-      content: "Confidential";
-      font-size: 7pt;
-      color: #d6d3cc;
-      font-family: 'DejaVu Serif', 'Times New Roman', Georgia, serif;
+      content: "Confidential // Tier 4 SEO Audit";
+      font-size: 7.5pt;
+      color: #94a3b8;
+      font-family: system-ui, -apple-system, sans-serif;
     }}
     @bottom-right {{
-      content: "{domain} Google SEO Report";
+      content: "{domain} SEO Audit Report";
       font-size: 8pt;
-      color: #cbd5e1;
-      font-family: 'DejaVu Serif', 'Times New Roman', Georgia, serif;
+      color: #94a3b8;
+      font-family: system-ui, -apple-system, sans-serif;
     }}
   }}
 
@@ -411,7 +470,7 @@ def _build_css(domain: str) -> str:
     @bottom-center {{
       content: counter(page);
       font-size: 9pt;
-      color: #6b7280;
+      color: #64748b;
     }}
   }}
 
@@ -422,95 +481,108 @@ def _build_css(domain: str) -> str:
   }}
 
   body {{
-    font-family: 'Times New Roman', 'DejaVu Serif', Georgia, serif;
-    font-size: 10pt;
-    line-height: 1.55;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    line-height: 1.5;
     color: #1e293b;
     background: white;
   }}
 
-  /* ─── Title Page (Clean White) ─── */
+  /* ─── Title Page (Premium Cyber Dark Mode) ─── */
   .title-page {{
     page: first;
     width: 210mm;
     height: 297mm;
-    background: #ffffff;
+    background: linear-gradient(135deg, #090c0d 0%, #141a1c 100%);
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
-    color: #1a1a2e;
+    color: #e5f9f6;
     position: relative;
-    padding: 50mm 30mm 40mm 30mm;
-    border-top: 6mm solid #1e3a5f;
+    padding: 50mm 20mm 40mm 20mm;
+    border-top: 6mm solid #00ff66;
+    border-bottom: 6mm solid #00f0ff;
   }}
 
   .title-page .badge {{
-    background: #f7f6f3;
-    border: 1px solid #d6d3cc;
+    background: rgba(0, 255, 102, 0.08);
+    border: 1px solid rgba(0, 255, 102, 0.2);
     border-radius: 20px;
     padding: 6px 18px;
-    font-size: 9pt;
+    font-size: 8.5pt;
     letter-spacing: 2px;
     text-transform: uppercase;
-    margin-bottom: 15mm;
-    color: #1e3a5f;
+    margin-bottom: 12mm;
+    color: #00ff66;
+    font-family: monospace;
+    font-weight: bold;
+    box-shadow: 0 0 10px rgba(0, 255, 102, 0.05);
   }}
 
   .title-page h1 {{
-    font-size: 28pt;
-    font-weight: bold;
-    margin-bottom: 5mm;
-    letter-spacing: -0.5px;
-    line-height: 1.2;
-    color: #1a1a2e;
+    font-size: 26pt;
+    font-weight: 800;
+    margin-bottom: 4mm;
+    letter-spacing: -1px;
+    line-height: 1.1;
+    color: #ffffff;
+    font-family: system-ui, -apple-system, sans-serif;
   }}
 
   .title-page .subtitle {{
-    font-size: 13pt;
-    color: #6b7280;
+    font-size: 12pt;
+    color: #b8cfcd;
     margin-bottom: 12mm;
-    font-weight: 300;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
   }}
 
   .title-page .url {{
-    font-size: 12pt;
-    color: #1e3a5f;
+    font-size: 11pt;
+    color: #00f0ff;
     margin-bottom: 15mm;
-    padding: 4mm 8mm;
-    border: 1px solid #d6d3cc;
-    border-radius: 6px;
-    background: #faf9f7;
+    padding: 3mm 6mm;
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(0, 240, 255, 0.04);
+    font-family: monospace;
   }}
 
   .title-page .score-box {{
-    background: #faf9f7;
-    border: 2px solid #d6d3cc;
+    background: rgba(255, 255, 255, 0.01);
+    border: 2px solid rgba(0, 255, 102, 0.3);
     border-radius: 12px;
     padding: 6mm 12mm;
     margin-bottom: 15mm;
+    box-shadow: 0 0 15px rgba(0, 255, 102, 0.1);
   }}
 
   .title-page .score-number {{
     font-size: 42pt;
     font-weight: bold;
-    color: #1e3a5f;
+    color: #00ff66;
     line-height: 1;
+    text-shadow: 0 0 10px rgba(0, 255, 102, 0.3);
   }}
 
   .title-page .score-label {{
-    font-size: 10pt;
-    color: #6b7280;
+    font-size: 9.5pt;
+    color: #b8cfcd;
     margin-top: 2mm;
+    text-transform: uppercase;
+    letter-spacing: 1px;
   }}
 
   .title-page .meta {{
-    font-size: 9pt;
-    color: #6b7280;
+    font-size: 8.5pt;
+    color: #5c7573;
     margin-top: 8mm;
     padding-top: 5mm;
-    border-top: 1px solid #d6d3cc;
+    border-top: 1px solid #1e2629;
+    width: 60%;
   }}
 
   .title-page .meta span {{
@@ -521,14 +593,16 @@ def _build_css(domain: str) -> str:
   .toc-page {{
     page: toc;
     page-break-before: always;
+    padding-top: 10mm;
   }}
 
   .toc-page h2 {{
-    font-size: 18pt;
-    color: #1e3a5f;
+    font-size: 16pt;
+    color: #0f172a;
     margin-bottom: 8mm;
     padding-bottom: 3mm;
-    border-bottom: 2px solid #1e3a5f;
+    border-bottom: 2px solid #0f172a;
+    font-weight: 700;
   }}
 
   .toc-list {{
@@ -537,37 +611,37 @@ def _build_css(domain: str) -> str:
   }}
 
   .toc-list li {{
-    padding: 2mm 0;
+    padding: 2.5mm 0;
     border-bottom: 1px solid #f1f5f9;
     overflow: hidden;
   }}
 
   .toc-list li.toc-section {{
     font-weight: bold;
-    font-size: 11pt;
-    padding-top: 4mm;
+    font-size: 10.5pt;
+    padding-top: 3.5mm;
     color: #0f172a;
   }}
 
   .toc-list li.toc-sub {{
-    padding-left: 8mm;
-    font-size: 9.5pt;
+    padding-left: 6mm;
+    font-size: 9pt;
     color: #475569;
   }}
 
   .toc-score {{
     display: inline-block;
     float: right;
-    padding: 1px 8px;
-    border-radius: 10px;
-    font-size: 9pt;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 8pt;
     font-weight: bold;
     color: white;
   }}
 
-  .score-good {{ background: #2d6a4f; }}
-  .score-warn {{ background: #d4740e; }}
-  .score-bad {{ background: #c53030; }}
+  .score-good {{ background: #16a34a; }}
+  .score-warn {{ background: #d97706; }}
+  .score-bad {{ background: #dc2626; }}
 
   /* ─── Section Styles ─── */
   div.section {{
@@ -575,74 +649,79 @@ def _build_css(domain: str) -> str:
   }}
 
   .section-header {{
-    background: #faf9f7;
-    border-left: 4px solid #1e3a5f;
+    background: #f8fafc;
+    border-left: 4px solid #0f172a;
     padding: 5mm 6mm;
     margin-bottom: 6mm;
     page-break-after: avoid;
+    border-radius: 0 6px 6px 0;
   }}
 
   .section-header h2 {{
-    font-size: 16pt;
+    font-size: 15pt;
     color: #0f172a;
-    margin-bottom: 1mm;
+    margin-bottom: 1.5mm;
+    font-weight: 700;
   }}
 
   .section-header .section-score {{
-    font-size: 12pt;
+    font-size: 11pt;
     font-weight: bold;
     float: right;
     margin-top: -6mm;
+    color: #0f172a;
   }}
 
   h3 {{
-    font-size: 12pt;
-    color: #1e3a5f;
+    font-size: 11pt;
+    color: #0f172a;
     margin-top: 6mm;
     margin-bottom: 3mm;
     padding-bottom: 1.5mm;
-    border-bottom: 1px solid #d6d3cc;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 700;
     page-break-after: avoid;
   }}
 
   h4 {{
-    font-size: 10.5pt;
+    font-size: 10pt;
     color: #334155;
     margin-top: 4mm;
     margin-bottom: 2mm;
+    font-weight: 600;
     page-break-after: avoid;
   }}
 
   p {{
-    margin-bottom: 3mm;
+    margin-bottom: 2.5mm;
     color: #334155;
   }}
 
   .highlight {{
-    background: #fef3c7;
-    border-left: 3px solid #d4740e;
+    background: #fffbeb;
+    border-left: 3px solid #ffb700;
     padding: 3mm 4mm;
     margin: 4mm 0;
-    font-size: 9.5pt;
-    /* allow page breaks to prevent white gaps */
+    font-size: 9pt;
+    border-radius: 0 4px 4px 0;
   }}
 
   .critical-box {{
     background: #fef2f2;
-    border-left: 3px solid #c53030;
+    border-left: 3px solid #ff3c5c;
     padding: 3mm 4mm;
     margin: 4mm 0;
-    font-size: 9.5pt;
-    /* allow page breaks to prevent white gaps */
+    font-size: 9pt;
+    border-radius: 0 4px 4px 0;
   }}
 
   .success-box {{
     background: #f0fdf4;
-    border-left: 3px solid #2d6a4f;
+    border-left: 3px solid #00ff66;
     padding: 3mm 4mm;
     margin: 4mm 0;
-    font-size: 9.5pt;
-    /* allow page breaks to prevent white gaps */
+    font-size: 9pt;
+    border-radius: 0 4px 4px 0;
   }}
 
   /* ─── Tables ─── */
@@ -650,53 +729,53 @@ def _build_css(domain: str) -> str:
     width: 100%;
     border-collapse: collapse;
     margin: 4mm 0 6mm 0;
-    font-size: 9pt;
+    font-size: 8.5pt;
   }}
 
   thead th {{
-    background: #f7f6f3;
+    background: #f8fafc;
     color: #0f172a;
     font-weight: bold;
-    padding: 3mm 4mm;
+    padding: 2.5mm 3.5mm;
     text-align: left;
-    border-bottom: 2px solid #d6d3cc;
-    font-size: 9pt;
+    border-bottom: 2px solid #e2e8f0;
+    font-size: 8.5pt;
   }}
 
   tbody td {{
-    padding: 2.5mm 3mm;
+    padding: 2mm 3mm;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: top;
   }}
 
   tbody tr:nth-child(even) {{
-    background: #fdfcfa;
+    background: #fafbfc;
   }}
 
   .status-pass {{
-    color: #2d6a4f;
+    color: #16a34a;
     font-weight: bold;
   }}
 
   .status-fail {{
-    color: #c53030;
+    color: #dc2626;
     font-weight: bold;
   }}
 
   .status-warn {{
-    color: #d4740e;
+    color: #d97706;
     font-weight: bold;
   }}
 
   .status-partial {{
-    color: #4a5568;
+    color: #475569;
     font-weight: bold;
   }}
 
   /* ─── Charts ─── */
   .chart-container {{
     text-align: center;
-    margin: 4mm 0;
+    margin: 5mm 0;
   }}
 
   .chart-container img {{
@@ -706,8 +785,8 @@ def _build_css(domain: str) -> str:
   }}
 
   .chart-caption {{
-    font-size: 8.5pt;
-    color: #6b7280;
+    font-size: 8pt;
+    color: #64748b;
     font-style: italic;
     margin-top: 2mm;
     text-align: center;
@@ -755,22 +834,24 @@ def _build_css(domain: str) -> str:
 
   /* ─── Metric Cards ─── */
   .metric-card {{
-    background: #faf9f7;
-    border: 1px solid #d6d3cc;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 6px;
     padding: 2.5mm 3mm;
     text-align: center;
     margin: 2mm 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.01);
   }}
 
   .metric-card .value {{
-    font-size: 14pt;
+    font-size: 13pt;
     font-weight: bold;
     line-height: 1.2;
+    color: #0f172a;
   }}
 
   .metric-card .label {{
-    font-size: 7.5pt;
+    font-size: 7pt;
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -779,31 +860,36 @@ def _build_css(domain: str) -> str:
 
   /* ─── Action Plan ─── */
   .action-item {{
-    background: #faf9f7;
-    border-radius: 4px;
+    background: #f8fafc;
+    border-radius: 6px;
     padding: 3mm 4mm;
     margin: 3mm 0;
-    border-left: 3px solid #cbd5e1;
-    /* allow page breaks to prevent white gaps */
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #94a3b8;
   }}
 
   .action-item.critical {{
-    border-left-color: #c53030;
-    background: #fdf2f2;
+    border-left-color: #ff3c5c;
+    background: #fef2f2;
+    border-color: #fee2e2;
   }}
 
   .action-item.high {{
-    border-left-color: #d4740e;
-    background: #fdf8ef;
+    border-left-color: #ffb700;
+    background: #fffbeb;
+    border-color: #fef3c7;
   }}
 
   .action-item.medium {{
-    border-left-color: #1e3a5f;
-    background: #f0f4f8;
+    border-left-color: #00f0ff;
+    background: #f0fdfa;
+    border-color: #ccfbf1;
   }}
 
   .action-item.low {{
-    border-left-color: #94a3b8;
+    border-left-color: #00ff66;
+    background: #f0fdf4;
+    border-color: #bbf7d0;
   }}
 
   .action-item h4 {{
@@ -811,10 +897,11 @@ def _build_css(domain: str) -> str:
     margin-bottom: 1.5mm;
     border-bottom: none;
     padding-bottom: 0;
+    font-weight: bold;
   }}
 
   .action-item .effort {{
-    font-size: 8.5pt;
+    font-size: 8pt;
     color: #64748b;
     float: right;
   }}
@@ -823,54 +910,53 @@ def _build_css(domain: str) -> str:
     display: inline-block;
     padding: 0.5mm 3mm;
     border-radius: 3px;
-    font-size: 8pt;
+    font-size: 7.5pt;
     font-weight: bold;
     color: white;
     margin-right: 2mm;
     vertical-align: middle;
   }}
 
-  .priority-critical {{ background: #c53030; }}
-  .priority-high {{ background: #d4740e; }}
-  .priority-medium {{ background: #1e3a5f; }}
-  .priority-low {{ background: #94a3b8; }}
+  .priority-critical {{ background: #ff3c5c; }}
+  .priority-high {{ background: #ffb700; }}
+  .priority-medium {{ background: #00f0ff; color: #0f172a; }}
+  .priority-low {{ background: #00ff66; color: #0f172a; }}
 
   /* ─── Code blocks ─── */
   .code-block {{
-    background: #1e293b;
+    background: #0f172a;
     color: #e2e8f0;
     padding: 3mm 4mm;
-    border-radius: 4px;
+    border-radius: 6px;
     font-family: 'DejaVu Sans Mono', monospace;
-    font-size: 8pt;
-    line-height: 1.6;
+    font-size: 7.5pt;
+    line-height: 1.5;
     margin: 3mm 0;
     white-space: pre-wrap;
     word-break: break-all;
-    /* allow page breaks to prevent white gaps */
+    border: 1px solid #1e293b;
   }}
 
   /* ─── Divider ─── */
   .divider {{
     border: none;
-    border-top: 1px solid #d6d3cc;
+    border-top: 1px solid #e2e8f0;
     margin: 5mm 0;
   }}
 
   /* ─── Roadmap ─── */
   .roadmap-phase {{
-    background: #faf9f7;
+    background: #f8fafc;
     border-radius: 6px;
     padding: 4mm 5mm;
     margin: 4mm 0;
-    border: 1px solid #d6d3cc;
-    /* allow page breaks to prevent white gaps */
+    border: 1px solid #e2e8f0;
   }}
 
   .roadmap-phase h4 {{
     margin-top: 0;
     border-bottom: none;
-    color: #1e3a5f;
+    color: #0f172a;
   }}
 
   .roadmap-phase ul {{
@@ -880,7 +966,7 @@ def _build_css(domain: str) -> str:
 
   .roadmap-phase li {{
     margin-bottom: 1.5mm;
-    font-size: 9.5pt;
+    font-size: 9pt;
     color: #334155;
   }}
 
@@ -896,12 +982,45 @@ def _build_css(domain: str) -> str:
 
   /* ─── Data freshness ─── */
   .data-freshness {{
-    font-size: 8pt;
-    color: #6b7280;
+    font-size: 7.5pt;
+    color: #64748b;
     font-style: italic;
     margin-top: 4mm;
     padding-top: 2mm;
-    border-top: 1px solid #d6d3cc;
+    border-top: 1px solid #e2e8f0;
+  }}
+
+  @media screen {{
+    body {{
+      background-color: #090c0d;
+      padding: 40px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 10pt;
+    }}
+    .title-page, .toc-page, div.section {{
+      background-color: #ffffff;
+      width: 210mm;
+      min-height: 297mm;
+      padding: 22mm 18mm 25mm 18mm;
+      margin: 0 auto 30px auto;
+      border-radius: 8px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
+      position: relative;
+    }}
+    .title-page {{
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 297mm;
+      background: linear-gradient(135deg, #090c0d 0%, #141a1c 100%);
+      border-top: 6mm solid #00ff66;
+      border-bottom: 6mm solid #00f0ff;
+      padding-top: 0;
+      padding-bottom: 0;
+    }}
   }}
 """
 
@@ -977,7 +1096,7 @@ def _build_title_page(domain, report_title, subtitle, score=None, score_label=No
         f'<div class="title-page">\n'
         f'  <div class="badge">{report_title}</div>\n'
         f'  <h1>{domain}</h1>\n'
-        f'  <div class="subtitle">Prepared by Claude SEO</div>\n'
+        f'  <div class="subtitle">Prepared by SEO AASHAN</div>\n'
         f'{score_html}'
         f'{meta_html}'
         f'{google_logo_html}'
@@ -1834,13 +1953,388 @@ def _build_methodology_footer(domain, timestamp):
         f'    </tbody>\n'
         f'  </table>\n'
         f'  <p style="color: #94a3b8; font-size: 9pt; margin-top: 5mm;">\n'
-        f'    Report generated by Claude SEO &mdash; Google SEO Intelligence Skill &mdash; '
+        f'    Report generated by SEO AASHAN &mdash; Google SEO Intelligence Skill &mdash; '
         f'{timestamp}<br>\n'
         f'    Methodology based on Google Web Vitals thresholds, Search Console documentation, '
         f'and Lighthouse scoring algorithms.\n'
         f'  </p>\n'
         f'</div>\n'
     )
+
+
+def _build_crawl_single_report(domain, timestamp, data):
+    """Build the Single Page SEO crawl report HTML body."""
+    url = data.get("url", f"https://{domain}")
+    seo_score = data.get("seoScore", 0)
+    findings = data.get("findings", {})
+
+    lines = []
+
+    # 1. Executive Summary
+    lines.append('\n<!-- ======================================================= 1. EXECUTIVE SUMMARY === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>1. Executive Summary</h2>')
+    lines.append(f'    <div class="section-score" style="color: {_score_color(seo_score)};">{seo_score}/100</div>')
+    lines.append('  </div>')
+    lines.append(f'  <p>Single Page SEO Audit for <strong>{url}</strong> conducted on {timestamp}.</p>')
+
+    # Metric cards row
+    word_count = data.get("wordCount", 0)
+    img_count = findings.get("imageCount", 0)
+    missing_alt = findings.get("missingAltCount", 0)
+    internal_links = findings.get("internalLinks", 0)
+    external_links = findings.get("externalLinks", 0)
+    schema_count = findings.get("schemaCount", 0)
+
+    lines.append('  <div class="four-col">')
+    lines.append(f'    <div class="col">{_metric_card(word_count, "Word Count", BRAND["primary"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card(img_count, "Total Images", BRAND["secondary"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card(f"{internal_links} / {external_links}", "Internal/External Links", BRAND["accent"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card(schema_count, "Schema Objects", BRAND["success"])}</div>')
+    lines.append('  </div>')
+
+    # Summary of tags check box
+    lines.append('  <div class="highlight" style="margin-top: 6mm;">')
+    lines.append('    <strong>Page Profile Summary:</strong>')
+    lines.append('    <ul>')
+    lines.append(f'      <li><strong>Title Tag</strong>: {"Present" if findings.get("hasTitle") else "Missing"}</li>')
+    lines.append(f'      <li><strong>Meta Description</strong>: {"Present" if findings.get("hasDesc") else "Missing"}</li>')
+    lines.append(f'      <li><strong>H1 Count</strong>: {findings.get("h1Count", 0)} (optimal: 1)</li>')
+    lines.append(f'      <li><strong>Images Missing Alt Tags</strong>: {missing_alt}</li>')
+    lines.append('    </ul>')
+    lines.append('  </div>')
+    lines.append('</div>')
+
+    # 2. Gap Analysis
+    lines.append('\n<!-- ======================================================= 2. GAP ANALYSIS === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>2. On-Page Gap Analysis Details</h2>')
+    lines.append('  </div>')
+    lines.append('  <table>')
+    lines.append('    <thead>')
+    lines.append('      <tr><th>SEO Factor</th><th>Status</th><th>Detected Value / Insight</th></tr>')
+    lines.append('    </thead>')
+    lines.append('    <tbody>')
+
+    # Title row
+    title_ok = findings.get("hasTitle")
+    title_status = '<span class="status-pass">PASS</span>' if title_ok else '<span class="status-fail">FAIL</span>'
+    title_text = findings.get("titleText", "")
+    title_val = f'"{title_text}"' if title_text else "Missing &lt;title&gt; element in page &lt;head&gt;."
+    lines.append(f'      <tr><td><strong>Title Tag</strong></td><td>{title_status}</td><td>{title_val}</td></tr>')
+
+    # Meta Desc row
+    desc_ok = findings.get("hasDesc")
+    desc_status = '<span class="status-pass">PASS</span>' if desc_ok else '<span class="status-warn">WARN</span>'
+    desc_text = findings.get("descText", "")
+    desc_val = f'"{desc_text}"' if desc_text else "Missing &lt;meta name=\'description\'&gt; tag."
+    lines.append(f'      <tr><td><strong>Meta Description</strong></td><td>{desc_status}</td><td>{desc_val}</td></tr>')
+
+    # H1 count row
+    h1_count = findings.get("h1Count", 0)
+    h1_status = '<span class="status-pass">PASS</span>' if h1_count == 1 else '<span class="status-warn">WARN</span>'
+    h1_val = f"Found {h1_count} tags. Page must contain exactly one h1 tag for clean hierarchy."
+    lines.append(f'      <tr><td><strong>H1 Headings</strong></td><td>{h1_status}</td><td>{h1_val}</td></tr>')
+
+    # Image Alt row
+    alt_status = '<span class="status-pass">PASS</span>' if missing_alt == 0 else '<span class="status-warn">WARN</span>'
+    alt_val = f"{img_count} images found. {missing_alt} images are missing alternative text attributes."
+    lines.append(f'      <tr><td><strong>Image Alt Attributes</strong></td><td>{alt_status}</td><td>{alt_val}</td></tr>')
+
+    # Schema row
+    schema_status = '<span class="status-pass">PASS</span>' if schema_count > 0 else '<span class="status-warn">WARN</span>'
+    schema_val = f"Detected {schema_count} structured data markup block(s) (JSON-LD or microdata)."
+    lines.append(f'      <tr><td><strong>Schema Structured Data</strong></td><td>{schema_status}</td><td>{schema_val}</td></tr>')
+
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    lines.append('</div>')
+
+    # 3. Action Plan & Recommendations
+    lines.append('\n<!-- ======================================================= 3. RECOMMENDATIONS === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>3. Priority Recommendations</h2>')
+    lines.append('  </div>')
+
+    rec_count = 0
+    if not title_ok:
+        rec_count += 1
+        lines.append('  <div class="action-item critical">')
+        lines.append(f'    <h4>{rec_count}. Inject Target Title Tag <span class="effort">Effort: Low (15 min)</span></h4>')
+        lines.append('    <p><strong>Rationale</strong>: The page completely lacks a title tag. Google will auto-generate one from random links, harming click-through rates.</p>')
+        lines.append('    <p><strong>Remedy</strong>: Place a descriptive, keyword-rich title between 50-60 characters inside <code>&lt;title&gt;&lt;/title&gt;</code> tags in the head block.</p>')
+        lines.append('  </div>')
+
+    if not desc_ok:
+        rec_count += 1
+        lines.append('  <div class="action-item high">')
+        lines.append(f'    <h4>{rec_count}. Add Compelling Meta Description <span class="effort">Effort: Low (20 min)</span></h4>')
+        lines.append('    <p><strong>Rationale</strong>: Search snippets will use fallback body fragments which are often not persuasive.</p>')
+        lines.append('    <p><strong>Remedy</strong>: Write a meta description (120-155 characters) that includes a call-to-action to maximize click-throughs.</p>')
+        lines.append('  </div>')
+
+    if h1_count != 1:
+        rec_count += 1
+        lines.append('  <div class="action-item medium">')
+        lines.append(f'    <h4>{rec_count}. Fix H1 Tag Heading count <span class="effort">Effort: Low (10 min)</span></h4>')
+        lines.append(f'    <p><strong>Rationale</strong>: The crawler detected {h1_count} h1 headings. Google expects a single primary theme H1 at the top of the body block.</p>')
+        lines.append('    <p><strong>Remedy</strong>: Consolidate the structure so only the main article title uses the h1 tag, converting secondary headings to h2/h3 tags.</p>')
+        lines.append('  </div>')
+
+    if missing_alt > 0:
+        rec_count += 1
+        lines.append('  <div class="action-item medium">')
+        lines.append(f'    <h4>{rec_count}. Fix {missing_alt} Missing Image Alt Tags <span class="effort">Effort: Medium (1-2 hrs)</span></h4>')
+        lines.append('    <p><strong>Rationale</strong>: Alternative text makes visual elements crawlable for Google Image Search and is required for WCAG accessibility.</p>')
+        lines.append('    <p><strong>Remedy</strong>: Add descriptive alt attributes to all indexable images (e.g. <code>alt="Dashboard UI with organic performance charts"</code>).</p>')
+        lines.append('  </div>')
+
+    if schema_count == 0:
+        rec_count += 1
+        lines.append('  <div class="action-item low">')
+        lines.append(f'    <h4>{rec_count}. Deploy Schema.org Markup <span class="effort">Effort: Medium (1 hr)</span></h4>')
+        lines.append('    <p><strong>Rationale</strong>: Rich results require structured schema markup (like Article, Product, or FAQ) to unlock high-CTR search features.</p>')
+        lines.append('    <p><strong>Remedy</strong>: Use the utility console\'s Schema Markup view to generate and embed clean JSON-LD blocks.</p>')
+        lines.append('  </div>')
+
+    if rec_count == 0:
+        lines.append('  <div class="success-box"><strong>No on-page optimization gaps detected!</strong> This page is properly optimized with meta tags and structural semantic elements.</div>')
+
+    lines.append('</div>')
+
+    return "\n".join(lines)
+
+
+def _build_crawl_full_report(domain, timestamp, data, chart_paths):
+    """Build the Comprehensive Website crawl audit report HTML body."""
+    url = data.get("url", f"https://{domain}")
+    seo_score = data.get("seoScore", 0)
+    crawled_count = data.get("crawledCount", 0)
+    sitemap_status = data.get("sitemapStatus", "missing").upper()
+    has_llms = "Found" if data.get("hasLlmsTxt") else "Missing"
+
+    lines = []
+
+    # 1. Executive Summary
+    lines.append('\n<!-- ======================================================= 1. EXECUTIVE SUMMARY === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>1. Executive Summary</h2>')
+    lines.append(f'    <div class="section-score" style="color: {_score_color(seo_score)};">{seo_score}/100</div>')
+    lines.append('  </div>')
+    lines.append(f'  <p>Comprehensive website crawler analysis of <strong>{url}</strong> conducted on {timestamp}. '
+                 f'The site was audited using crawl rules checking internal structure, E-E-A-T pages, '
+                 f'sitemap layout, and robots guidelines.</p>')
+
+    # Metric cards row
+    lines.append('  <div class="four-col">')
+    lines.append(f'    <div class="col">{_metric_card(f"{seo_score}/100", "Health Score", _score_color(seo_score))}</div>')
+    lines.append(f'    <div class="col">{_metric_card(crawled_count, "Pages Crawled", BRAND["primary"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card(sitemap_status, "XML Sitemap Status", BRAND["success"] if "PRESENT" in sitemap_status else BRAND["warning"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card(has_llms, "llms.txt Crawlable", BRAND["success"] if "Found" in has_llms else BRAND["muted"])}</div>')
+    lines.append('  </div>')
+
+    # E-E-A-T status box
+    contacts_found = data.get("contactsFound", False)
+    privacy_found = data.get("privacyFound", False)
+    eeat_box = "success-box" if (contacts_found and privacy_found) else "highlight"
+    lines.append(f'  <div class="{eeat_box}" style="margin-top: 6mm;">')
+    lines.append('    <strong>E-E-A-T Accessibility:</strong>')
+    lines.append('    <ul>')
+    lines.append(f'      <li><strong>Contact / Location page</strong>: {"Present" if contacts_found else "Missing (reduces trust signals)"}</li>')
+    lines.append(f'      <li><strong>Privacy / Terms Policy</strong>: {"Present" if privacy_found else "Missing (affects compliance and domain authority)"}</li>')
+    lines.append('    </ul>')
+    lines.append('  </div>')
+    lines.append('</div>')
+
+    # 2. Category Breakdown & Visual Chart
+    lines.append('\n<!-- ======================================================= 2. CATEGORY SCORES === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>2. Category Weight Contributions</h2>')
+    lines.append('  </div>')
+
+    # Insert Matplotlib Categories Chart
+    categories_chart_path = chart_paths.get("crawl_categories_path", "")
+    if categories_chart_path:
+        lines.append(f'  <div class="chart-container">')
+        lines.append(f'    <img src="file://{categories_chart_path}" style="width: 80%;" alt="Crawl audit category breakdown">')
+        lines.append(f'    <div class="chart-caption">Figure 1: Crawl health breakdown across the 7 critical search factors.</div>')
+        lines.append(f'  </div>')
+
+    lines.append('  <table>')
+    lines.append('    <thead>')
+    lines.append('      <tr><th>Audit Category</th><th>Score</th><th>Weight</th><th>Health Contribution</th></tr>')
+    lines.append('    </thead>')
+    lines.append('    <tbody>')
+
+    categories_weights = [
+        ("technical", "Technical SEO", "22%"),
+        ("content", "Content Quality", "23%"),
+        ("onpage", "On-Page SEO", "20%"),
+        ("schema", "Schema / Structured Data", "10%"),
+        ("performance", "Performance (CWV)", "10%"),
+        ("geo", "AI Search Readiness (GEO)", "10%"),
+        ("images", "Images alt coverage", "5%"),
+    ]
+
+    scores = data.get("categoryScores", {})
+    for key, label, weight in categories_weights:
+        score = scores.get(key, 0)
+        contrib = score * float(weight.replace("%", "")) / 100
+        cls = "status-pass" if score >= 90 else ("status-warn" if score >= 50 else "status-fail")
+        lines.append(f'      <tr><td>{label}</td><td class="{cls}">{score}/100</td><td>{weight}</td><td>{contrib:.2f}</td></tr>')
+
+    lines.append(f'      <tr style="font-weight: bold; border-top: 2px solid {BRAND["grid"]};">')
+    lines.append(f'        <td>Total Overall Index</td><td></td><td>100%</td><td style="color: {BRAND["success"]};">{seo_score}/100</td>')
+    lines.append('      </tr>')
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    lines.append('</div>')
+
+    # 3. Prioritized Checklist
+    lines.append('\n<!-- ======================================================= 3. FINDINGS CHECKLIST === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>3. Prioritized Audit Findings</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>The crawling rules identified the following optimization gaps, sorted by severity. Address red and orange items first.</p>')
+
+    findings_list = data.get("findings", [])
+
+    criticals = [f for f in findings_list if f.get("severity") == "Critical"]
+    highs = [f for f in findings_list if f.get("severity") == "High"]
+    mediums = [f for f in findings_list if f.get("severity") == "Medium"]
+    lows = [f for f in findings_list if f.get("severity") == "Low"]
+
+    def format_finding_item(f, priority_lbl, item_class):
+        return (
+            f'  <div class="action-item {item_class}">\n'
+            f'    <h4><span class="priority-tag priority-{item_class}">{priority_lbl}</span> {f.get("message", "")}</h4>\n'
+            f'    <p><strong>Category</strong>: {f.get("category", "")} | <strong>Rule</strong>: <code>{f.get("rule", "")}</code></p>\n'
+            f'    <p><strong>Remedy</strong>: {f.get("remedy", "")}</p>\n'
+            f'  </div>'
+        )
+
+    item_idx = 0
+    if criticals:
+        lines.append('  <h3>🔴 Critical Fixes (Fix Immediately)</h3>')
+        for f in criticals:
+            item_idx += 1
+            lines.append(format_finding_item(f, "CRITICAL", "critical"))
+        lines.append('')
+
+    if highs:
+        lines.append('  <h3>🟠 High Priority Tasks (Fix Within 1 Week)</h3>')
+        for f in highs:
+            item_idx += 1
+            lines.append(format_finding_item(f, "HIGH", "high"))
+        lines.append('')
+
+    if mediums:
+        lines.append('  <h3>🟡 Medium Priority Items (Fix Within 1 Month)</h3>')
+        for f in mediums:
+            item_idx += 1
+            lines.append(format_finding_item(f, "MEDIUM", "medium"))
+        lines.append('')
+
+    if lows:
+        lines.append('  <h3>🟢 Low Priority / Long-term Opportunities</h3>')
+        for f in lows:
+            item_idx += 1
+            lines.append(format_finding_item(f, "LOW", "low"))
+        lines.append('')
+
+    if item_idx == 0:
+        lines.append('  <div class="success-box"><strong>No optimization issues found!</strong> This site is properly tuned according to all Tier 4 crawl policies.</div>')
+
+    lines.append('</div>')
+
+    # 4. Crawled Pages Directory
+    lines.append('\n<!-- ======================================================= 4. CRAWLED PAGES DIRECTORY === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>4. Crawled Pages Index</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>Detailed report index of crawl statistics. Shows status code, word count, responsive load time, and page title (capped at 30 pages in preview).</p>')
+    lines.append('  <table>')
+    lines.append('    <thead>')
+    lines.append('      <tr><th>Crawled URL Path</th><th>Status</th><th>Words</th><th>Response Time</th><th>Page Title</th></tr>')
+    lines.append('    </thead>')
+    lines.append('    <tbody>')
+
+    pages = data.get("crawledPages", [])
+    for p in pages[:30]:
+        status = p.get("statusCode", 0)
+        status_cls = "status-pass" if status == 200 else "status-fail"
+        latency = p.get("responseTime", 0)
+        lat_cls = "status-pass" if latency <= 0.8 else ("status-warn" if latency <= 1.5 else "status-fail")
+        url_display = p.get("url", "").replace(url, "") or "/"
+
+        lines.append(
+            f'      <tr>'
+            f'<td style="word-break:break-all; font-family: monospace; font-size: 8pt;">{url_display}</td>'
+            f'<td class="{status_cls}" style="text-align:center;">{status}</td>'
+            f'<td style="text-align:right;">{p.get("wordCount", 0)}</td>'
+            f'<td class="{lat_cls}" style="text-align:right;">{latency:.2f}s</td>'
+            f'<td style="font-size: 8pt; color: {BRAND["secondary"]};">{p.get("title", "")[:45]}</td>'
+            f'</tr>'
+        )
+
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    if len(pages) > 30:
+        lines.append(f'  <p style="font-size: 8.5pt; font-style: italic; color: {BRAND["muted"]}; text-align: center;">... and {len(pages) - 30} additional page(s) crawled and verified.</p>')
+    lines.append('</div>')
+
+    # 5. Roadmap Timeline
+    lines.append('\n<!-- ======================================================= 5. TIMELINE ROADMAP === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>5. Implementation Roadmap</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>Structured schedule for applying the recommended improvements sequentially.</p>')
+
+    lines.append('  <div class="roadmap-phase">')
+    lines.append('    <h4>Phase 1: Week 1 &mdash; Technical Cleanup &amp; Quick Wins</h4>')
+    lines.append('    <ul>')
+    if "missing-xml-sitemap" in [f.get("rule") for f in findings_list]:
+        lines.append('      <li>Create /sitemap.xml and register it in robots.txt</li>')
+    if criticals:
+        lines.append('      <li>Resolve all Critical severity checklist violations</li>')
+    if not contacts_found or not privacy_found:
+        lines.append('      <li>Establish Contact and Privacy Policy pages to satisfy E-E-A-T heuristics</li>')
+    lines.append('      <li>Improve title and description tags on the homepage</li>')
+    lines.append('    </ul>')
+    lines.append('  </div>')
+
+    lines.append('  <div class="roadmap-phase">')
+    lines.append('    <h4>Phase 2: Weeks 2&ndash;3 &mdash; Page-level Content Depth</h4>')
+    lines.append('    <ul>')
+    if "thin-content" in [f.get("rule") for f in findings_list]:
+        lines.append('      <li>Expand content depth on low-wordcount thin pages</li>')
+    if highs:
+        lines.append('      <li>Address High severity on-page tag issues</li>')
+    if "missing-canonical" in [f.get("rule") for f in findings_list]:
+        lines.append('      <li>Deploy canonical headers on missing page directories</li>')
+    lines.append('    </ul>')
+    lines.append('  </div>')
+
+    lines.append('  <div class="roadmap-phase">')
+    lines.append('    <h4>Phase 3: Week 4 &mdash; Schema &amp; Rich Snippets Validation</h4>')
+    lines.append('    <ul>')
+    lines.append('      <li>Generate schema markup files for all core landing services</li>')
+    lines.append('      <li>Validate JSON-LD blocks structure using search crawlers</li>')
+    lines.append('      <li>Setup ongoing SEO drift baseline tracker and scheduling rules</li>')
+    lines.append('    </ul>')
+    lines.append('  </div>')
+
+    lines.append('</div>')
+
+    return "\n".join(lines)
 
 
 # ─── Report Assemblers ───────────────────────────────────────────────────────
@@ -1901,13 +2395,55 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
         if path:
             chart_paths["index_status_path"] = path
 
+    if report_type == "crawl-full":
+        path = chart_crawl_categories(data, charts_dir)
+        if path:
+            chart_paths["crawl_categories_path"] = path
+
     # ── Build HTML Sections ──────────────────────────────────────────────────
 
     sections = []
     fig_num = 1
 
+    # ── CRAWL-SINGLE report ──────────────────────────────────────────────────
+    if report_type == "crawl-single":
+        seo_score = data.get("seoScore", 0)
+        sections.append(_build_title_page(
+            domain, "Single Page SEO Audit",
+            "On-Page Technical &amp; Content Quality",
+            score=seo_score,
+            score_label="SEO Health Index",
+            meta_items=[timestamp, "Headless Crawl Auditor"],
+        ))
+        sections.append(_build_crawl_single_report(domain, timestamp, data))
+        sections.append(_build_methodology_footer(domain, timestamp))
+
+    # ── CRAWL-FULL report ────────────────────────────────────────────────────
+    elif report_type == "crawl-full":
+        seo_score = data.get("seoScore", 0)
+        crawled_count = data.get("crawledCount", 0)
+        sections.append(_build_title_page(
+            domain, "Website Crawl Audit Report",
+            "Comprehensive Architecture &amp; On-Page Review",
+            score=seo_score,
+            score_label="SEO Health Index",
+            meta_items=[timestamp, f"BFS Crawler ({crawled_count} pages)"],
+        ))
+
+        toc_sections = [
+            {"num": 1, "title": "Executive Summary", "subs": ["Key Metrics &amp; Trust Accessibility"]},
+            {"num": 2, "title": "Category Weight Contributions", "subs": ["Crawl Health Breakdown Chart"]},
+            {"num": 3, "title": "Prioritized Audit Findings", "subs": ["Actionable Optimization Gaps"]},
+            {"num": 4, "title": "Crawled Pages Index", "subs": ["Status, Wordcount &amp; Performance Index"]},
+            {"num": 5, "title": "Implementation Roadmap", "subs": ["Week 1", "Weeks 2-3", "Week 4"]},
+            {"num": 6, "title": "Data Sources &amp; Methodology", "subs": []},
+        ]
+        sections.append(_build_toc(toc_sections))
+        sections.append(_build_crawl_full_report(domain, timestamp, data, chart_paths))
+        sections.append(_build_methodology_footer(domain, timestamp))
+
     # ── CWV-AUDIT report ─────────────────────────────────────────────────────
-    if report_type == "cwv-audit":
+    elif report_type == "cwv-audit":
         mobile = data.get("psi", data)
         if isinstance(mobile, dict):
             mobile = mobile.get("psi", {}).get("mobile", mobile)
@@ -2143,16 +2679,24 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
         result["files"].append(str(html_path))
 
     if output_format in ("pdf", "both", "all"):
-        pdf_path = output_dir / f"{base_name}.pdf"
-        try:
-            HTML(string=html_content).write_pdf(str(pdf_path))
-            result["files"].append(str(pdf_path))
-            # Post-generation review
-            review = _review_pdf(str(pdf_path), html_content)
-            if review:
-                result["review"] = review
-        except Exception as e:
-            result["error"] = f"PDF generation failed: {e}"
+        if not WEASYPRINT_AVAILABLE:
+            result["error"] = "PDF generation failed: WeasyPrint dependencies (GTK3/libgobject) missing on Windows. Falling back to HTML."
+            # Fallback to write HTML so there is still a generated report file
+            html_fallback_path = output_dir / f"{base_name}.html"
+            with open(html_fallback_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            result["files"].append(str(html_fallback_path))
+        else:
+            pdf_path = output_dir / f"{base_name}.pdf"
+            try:
+                HTML(string=html_content).write_pdf(str(pdf_path))
+                result["files"].append(str(pdf_path))
+                # Post-generation review
+                review = _review_pdf(str(pdf_path), html_content)
+                if review:
+                    result["review"] = review
+            except Exception as e:
+                result["error"] = f"PDF generation failed: {e}"
 
     if output_format in ("xlsx", "all"):
         xlsx_path = generate_xlsx(data, domain, report_type, output_dir)
@@ -2284,6 +2828,129 @@ def generate_xlsx(data, domain, report_type, output_dir):
     ws.append(["Generated", datetime.now().strftime("%Y-%m-%d %H:%M")])
     ws.append([])
 
+    if report_type == "crawl-single":
+        findings = data.get("findings", {})
+        ws.append(["Single Page SEO Crawl Metrics", ""])
+        ws.append(["Metric", "Value"])
+        _style_header(ws, ws.max_row)
+        ws.append(["Word Count", data.get("wordCount", 0)])
+        ws.append(["SEO Health Index", f"{data.get('seoScore', 0)}/100"])
+        ws.append(["Total Images", findings.get("imageCount", 0)])
+        ws.append(["Images Missing Alt", findings.get("missingAltCount", 0)])
+        ws.append(["Internal Links", findings.get("internalLinks", 0)])
+        ws.append(["External Links", findings.get("externalLinks", 0)])
+        ws.append(["Schema Objects", findings.get("schemaCount", 0)])
+        ws.append([])
+        
+        # On-Page elements sheet
+        ws_tags = wb.create_sheet("On-Page Tags")
+        ws_tags.append(["On-Page Factor", "Status", "Value / Message"])
+        _style_header(ws_tags)
+        
+        ws_tags.append(["Title Tag", "PASS" if findings.get("hasTitle") else "FAIL", findings.get("titleText", "Missing title tag")])
+        ws_tags.append(["Meta Description", "PASS" if findings.get("hasDesc") else "WARN", findings.get("descText", "Missing meta description")])
+        
+        h1_c = findings.get("h1Count", 0)
+        ws_tags.append(["H1 Heading Count", "PASS" if h1_c == 1 else "WARN", f"Found {h1_c} h1 heading tag(s)"])
+        
+        missing_a = findings.get("missingAltCount", 0)
+        ws_tags.append(["Image Alt Tags", "PASS" if missing_a == 0 else "WARN", f"{missing_a} images are missing alternative alt attributes"])
+        
+        schema_c = findings.get("schemaCount", 0)
+        ws_tags.append(["Schema Structured Data", "PASS" if schema_c > 0 else "WARN", f"Found {schema_c} schema definitions"])
+        
+        for r in range(2, 7):
+            cell_status = ws_tags.cell(row=r, column=2)
+            cell_status.fill = _severity_fill(cell_status.value)
+            cell_status.alignment = Alignment(horizontal="center")
+            
+        _auto_width(ws_tags)
+        
+    elif report_type == "crawl-full":
+        # Crawl Statistics Summary
+        ws.append(["Website Crawl Statistics", ""])
+        ws.append(["Stat", "Value"])
+        _style_header(ws, ws.max_row)
+        ws.append(["Health Index Score", f"{data.get('seoScore', 0)}/100"])
+        ws.append(["Pages Crawled Count", data.get("crawledCount", 0)])
+        ws.append(["XML Sitemap", data.get("sitemapStatus", "missing").upper()])
+        ws.append(["llms.txt configuration", "Found" if data.get("hasLlmsTxt") else "Missing"])
+        ws.append(["Contact info present", "Yes" if data.get("contactsFound") else "No"])
+        ws.append(["Privacy page present", "Yes" if data.get("privacyFound") else "No"])
+        ws.append([])
+        
+        # Category scores breakdown
+        ws.append(["Category Breakdown Scores", ""])
+        ws.append(["Category", "Score", "Weight"])
+        _style_header(ws, ws.max_row)
+        
+        categories_list = [
+            ("technical", "Technical SEO", "22%"),
+            ("content", "Content Quality", "23%"),
+            ("onpage", "On-Page SEO", "20%"),
+            ("schema", "Schema / Structured Data", "10%"),
+            ("performance", "Performance (CWV)", "10%"),
+            ("geo", "AI Search Readiness (GEO)", "10%"),
+            ("images", "Images alt coverage", "5%"),
+        ]
+        scores_dict = data.get("categoryScores", {})
+        for key, name, weight in categories_list:
+            sc = scores_dict.get(key, 0)
+            ws.append([name, f"{sc}/100", weight])
+            row_idx = ws.max_row
+            ws.cell(row=row_idx, column=2).fill = _severity_fill("pass" if sc >= 90 else "warning" if sc >= 50 else "fail")
+        ws.append([])
+        
+        # Findings sheet
+        findings_list = data.get("findings", [])
+        if findings_list:
+            ws_find = wb.create_sheet("Findings")
+            ws_find.append(["Category", "Severity", "Rule ID", "Message", "Remedy / Fix"])
+            _style_header(ws_find)
+            
+            sev_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+            sorted_findings = sorted(findings_list, key=lambda f: sev_order.get(f.get("severity", "Low"), 4))
+            for f in sorted_findings:
+                ws_find.append([
+                    f.get("category", ""),
+                    f.get("severity", ""),
+                    f.get("rule", ""),
+                    f.get("message", ""),
+                    f.get("remedy", ""),
+                ])
+                row_idx = ws_find.max_row
+                ws_find.cell(row=row_idx, column=2).fill = _severity_fill(f.get("severity", ""))
+                ws_find.cell(row=row_idx, column=2).alignment = Alignment(horizontal="center")
+            
+            ws_find.auto_filter.ref = f"A1:E{ws_find.max_row}"
+            ws_find.freeze_panes = "A2"
+            _auto_width(ws_find)
+            
+        # Crawled Pages sheet
+        pages_list = data.get("crawledPages", [])
+        if pages_list:
+            ws_pages = wb.create_sheet("Crawled Pages")
+            ws_pages.append(["URL", "Status Code", "Word Count", "Response Latency", "Page Title"])
+            _style_header(ws_pages)
+            for p in pages_list:
+                ws_pages.append([
+                    p.get("url", ""),
+                    p.get("statusCode", 0),
+                    p.get("wordCount", 0),
+                    p.get("responseTime", 0),
+                    p.get("title", ""),
+                ])
+                row_idx = ws_pages.max_row
+                status = p.get("statusCode", 0)
+                ws_pages.cell(row=row_idx, column=2).fill = _severity_fill("pass" if status == 200 else "fail")
+                ws_pages.cell(row=row_idx, column=2).alignment = Alignment(horizontal="center")
+                latency = p.get("responseTime", 0)
+                ws_pages.cell(row=row_idx, column=4).fill = _severity_fill("pass" if latency <= 0.8 else "warning" if latency <= 1.5 else "fail")
+                
+            ws_pages.auto_filter.ref = f"A1:E{ws_pages.max_row}"
+            ws_pages.freeze_panes = "A2"
+            _auto_width(ws_pages)
+
     # Add scores if available
     if report_type in ("cwv-audit", "full"):
         psi = data.get("psi", data)
@@ -2294,7 +2961,7 @@ def generate_xlsx(data, domain, report_type, output_dir):
             ws.append(["Category", "Score"])
             _style_header(ws, ws.max_row)
             for cat in ["performance", "accessibility", "best_practices", "seo"]:
-                val = scores.get(cat)
+                val = scores.get(cat) if scores.get(cat) is not None else scores.get(cat.replace("_", "-"))
                 if val is not None:
                     row_num = ws.max_row + 1
                     ws.append([cat.replace("_", " ").title(), int(val * 100) if val <= 1 else val])
@@ -2404,7 +3071,7 @@ def main():
     )
     parser.add_argument(
         "--type", "-t",
-        choices=["cwv-audit", "gsc-performance", "indexation", "full"],
+        choices=["cwv-audit", "gsc-performance", "indexation", "full", "crawl-single", "crawl-full"],
         required=True,
         help="Report type",
     )

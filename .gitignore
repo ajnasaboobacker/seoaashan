@@ -162,3 +162,10 @@ presentations/
 
 # Internal implementation plans / specs (working notes, not user docs)
 docs/superpowers/
+
+# Local workspace metadata & Graphify build outputs
+.agents/
+graphify-out/
+saas-app/dist/
+saas-app/node_modules/
+saas-app/.env

@@ -88,18 +88,23 @@ def load_config() -> dict:
         except (json.JSONDecodeError, IOError) as e:
             print(f"Warning: Could not read config file: {e}", file=sys.stderr)
 
-    # Environment variable fallbacks
-    if not config["service_account_path"]:
+    # Environment variable overrides (highest precedence)
+    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
         config["service_account_path"] = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 
-    if not config["api_key"]:
+    if os.environ.get("GOOGLE_API_KEY"):
         config["api_key"] = os.environ.get("GOOGLE_API_KEY")
 
-    if not config["ga4_property_id"]:
+    if os.environ.get("GA4_PROPERTY_ID"):
         config["ga4_property_id"] = os.environ.get("GA4_PROPERTY_ID")
 
-    if not config["default_property"]:
+    if os.environ.get("GSC_PROPERTY"):
         config["default_property"] = os.environ.get("GSC_PROPERTY")
+
+    # Google Ads Environment Variable overrides for multi-tenant SaaS integration
+    config["ads_developer_token"] = os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN") or os.environ.get("ADS_DEVELOPER_TOKEN") or config.get("ads_developer_token")
+    config["ads_customer_id"] = os.environ.get("GOOGLE_ADS_CUSTOMER_ID") or os.environ.get("ADS_CUSTOMER_ID") or config.get("ads_customer_id")
+    config["ads_login_customer_id"] = os.environ.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID") or os.environ.get("ADS_LOGIN_CUSTOMER_ID") or config.get("ads_login_customer_id")
 
     return config
 
