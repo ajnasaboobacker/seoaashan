@@ -599,7 +599,7 @@ def generate_markdown_report(report_data: dict, filepath: str):
         if chart_path and os.path.exists(chart_path):
             rel_chart_name = os.path.basename(chart_path)
             lines.append("### Category Health Breakdown Chart")
-            lines.append(f"![Category Health Breakdown]({rel_chart_name})")
+            lines.append(f'<img src="{rel_chart_name}" alt="Category Health Breakdown" width="600" />')
             lines.append("")
     except Exception as e:
         print(f"Note: matplotlib chart was not embedded in markdown: {e}", file=sys.stderr)
@@ -665,13 +665,7 @@ def generate_markdown_report(report_data: dict, filepath: str):
         lines.append(f"| ... and {len(report_data['crawledPages']) - 30} more pages crawled. | | | | |")
     lines.append("")
     
-    # Community footer
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("Built by agricidaniel — Join the AI Marketing Hub community")
-    lines.append("🆓 Free  → https://www.skool.com/ai-marketing-hub")
-    lines.append("⚡ Pro   → https://www.skool.com/ai-marketing-hub-pro")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    
+
     # Save file
     try:
         with open(filepath, "w", encoding="utf-8") as f:

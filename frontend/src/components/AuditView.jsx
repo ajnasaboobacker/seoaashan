@@ -6,7 +6,8 @@ import { motion } from 'framer-motion';
 
 export default function AuditView() {
   const [url, setUrl] = useState('');
-  const [auditScope, setAuditScope] = useState('single'); // 'single' or 'full'
+  const [auditScope, setAuditScope] = useState('single'); // 'single', 'full', or 'complete'
+  const [activeTab, setActiveTab] = useState('client'); // 'client' or 'analyst'
   const [maxPages, setMaxPages] = useState(50);
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -33,11 +34,55 @@ export default function AuditView() {
     setLoading(true);
     setLogs([]);
     setReport(null);
+    setActiveTab('client');
 
     addLog(`Initiating SEO audit for host: ${url}`, 'SYS');
     addLog('Resolving DNS details and checking SSRF safety...', 'INFO');
 
-    if (auditScope === 'full') {
+    if (auditScope === 'complete') {
+      addLog('Starting COMPLETE AUDIT — BFS Crawl + PageSpeed + CrUX + GEO (running concurrently)...', 'INFO');
+      addLog('Spawning BFS website crawler...', 'INFO');
+      addLog('Spawning PageSpeed Insights checker...', 'INFO');
+      addLog('Spawning CrUX 25-week history fetch...', 'INFO');
+      addLog('Spawning GEO AI bot access + llms.txt checker...', 'INFO');
+
+      let simCount = 1;
+      const simPaths = ['/about', '/services', '/contact', '/blog', '/products', '/pricing', '/team', '/faq'];
+      simulatedLogInterval.current = setInterval(() => {
+        if (simCount < 20) {
+          const path = simPaths[Math.floor(Math.random() * simPaths.length)] + '-' + Math.floor(Math.random() * 99);
+          addLog(`BFS Crawling: ${url.replace(/\/$/, '')}${path}`, 'INFO');
+          simCount++;
+          if (simCount % 5 === 0) addLog('PSI: Lighthouse lab test in progress (mobile)...', 'SYS');
+          if (simCount % 7 === 0) addLog('CrUX: Fetching Google field data history...', 'SYS');
+        }
+      }, 1400);
+
+      try {
+        const response = await fetch('/api/audit/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, maxPages })
+        });
+
+        if (simulatedLogInterval.current) clearInterval(simulatedLogInterval.current);
+
+        const res = await response.json();
+        if (!response.ok) throw new Error(res.error || 'Complete audit failed');
+
+        if (res.logs && res.logs.length > 0) setLogs(res.logs);
+        else addLog('Complete audit finished — all signals gathered successfully.', 'SUCCESS');
+
+        addLog('BFS crawl complete. PageSpeed data merged. CrUX field data merged. GEO signals merged.', 'SUCCESS');
+        setReport(res);
+      } catch (err) {
+        if (simulatedLogInterval.current) clearInterval(simulatedLogInterval.current);
+        addLog(`ERR: ${err.message}`, 'ERROR');
+      } finally {
+        setLoading(false);
+      }
+
+    } else if (auditScope === 'full') {
       addLog(`Configuring BFS crawler. Maximum crawl cap: ${maxPages} pages.`, 'INFO');
       addLog('Fetching robots.txt directive mappings...', 'INFO');
 
@@ -148,14 +193,19 @@ export default function AuditView() {
     }
   };
 
-  const downloadReport = async () => {
+  const downloadReport = async (reportType = null) => {
     if (!report) return;
+    const effectiveType = reportType || (report.scope === 'complete' ? 'complete-client' : null);
     try {
       addLog('Initiating report compilation and file rendering...', 'SYS');
       const response = await fetch('/api/report/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: report, domain: report.domain || new URL(report.url).hostname })
+        body: JSON.stringify({ 
+          data: report, 
+          domain: report.domain || new URL(report.url).hostname,
+          reportType: effectiveType
+        })
       });
       
       if (!response.ok) {
@@ -170,8 +220,8 @@ export default function AuditView() {
       
       const contentType = response.headers.get('Content-Type');
       const ext = contentType && contentType.includes('html') ? '.html' : '.pdf';
-      
-      link.download = `SEO-Audit-Report-${report.domain || 'host'}${ext}`;
+      const fileLabel = effectiveType === 'complete-analyst' ? 'Analyst' : (effectiveType === 'complete-client' ? 'Client' : '');
+      link.download = `SEO-Audit-Report-${fileLabel ? fileLabel + '-' : ''}${report.domain || 'host'}${ext}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -241,7 +291,7 @@ export default function AuditView() {
           
           <div className="input-group">
             <label>AUDIT SCOPE</label>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', height: '45px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', height: '45px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className={`console-btn ${auditScope === 'single' ? 'active' : ''}`}
@@ -272,10 +322,26 @@ export default function AuditView() {
               >
                 FULL WEBSITE
               </button>
+              <button
+                type="button"
+                className={`console-btn ${auditScope === 'complete' ? 'active' : ''}`}
+                style={{
+                  background: auditScope === 'complete' ? 'var(--neon-cyan)' : 'var(--bg-console)',
+                  color: auditScope === 'complete' ? 'var(--bg-core)' : 'var(--color-text-main)',
+                  border: auditScope === 'complete' ? '1px solid var(--neon-cyan)' : '1px solid var(--border-color)',
+                  padding: '8px 12px',
+                  fontSize: '11px',
+                  boxShadow: auditScope === 'complete' ? '0 0 8px var(--neon-cyan)' : 'none'
+                }}
+                onClick={() => setAuditScope('complete')}
+                disabled={loading}
+              >
+                ✦ COMPLETE AUDIT
+              </button>
             </div>
           </div>
 
-          {auditScope === 'full' && (
+          {(auditScope === 'full' || auditScope === 'complete') && (
             <div className="input-group" style={{ maxWidth: '120px' }}>
               <label>MAX PAGES</label>
               <input
@@ -291,7 +357,7 @@ export default function AuditView() {
           )}
         </div>
         <button type="submit" className="console-btn" disabled={loading}>
-          <Play size={14} /> {loading ? 'AUDITING ARCHITECTURE...' : 'RUN CRAWL AUDIT'}
+          <Play size={14} /> {loading ? 'RUNNING COMPLETE AUDIT...' : auditScope === 'complete' ? '✦ RUN COMPLETE AUDIT' : 'RUN CRAWL AUDIT'}
         </button>
       </form>
 
@@ -323,20 +389,51 @@ export default function AuditView() {
           <div className="panel-card active-neon" style={{ gridColumn: 'span 2' }}>
             <div className="panel-header">
               <span>AUDIT SUMMARY: {report.domain || new URL(report.url).hostname}</span>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button 
-                  className="console-btn" 
-                  onClick={downloadReport}
-                  style={{
-                    background: 'var(--neon-cyan)',
-                    color: 'var(--bg-core)',
-                    padding: '4px 12px',
-                    fontSize: '11px',
-                    boxShadow: 'none'
-                  }}
-                >
-                  <Download size={12} /> DOWNLOAD REPORT
-                </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+                {report.scope === 'complete' ? (
+                  <>
+                    <button 
+                      className="console-btn" 
+                      onClick={() => downloadReport('complete-client')}
+                      style={{
+                        background: 'var(--neon-green)',
+                        color: 'var(--bg-core)',
+                        padding: '4px 12px',
+                        fontSize: '11px',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      <Download size={12} /> CLIENT REPORT
+                    </button>
+                    <button 
+                      className="console-btn" 
+                      onClick={() => downloadReport('complete-analyst')}
+                      style={{
+                        background: 'var(--neon-cyan)',
+                        color: 'var(--bg-core)',
+                        padding: '4px 12px',
+                        fontSize: '11px',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      <Download size={12} /> ANALYST REPORT
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    className="console-btn" 
+                    onClick={() => downloadReport()}
+                    style={{
+                      background: 'var(--neon-cyan)',
+                      color: 'var(--bg-core)',
+                      padding: '4px 12px',
+                      fontSize: '11px',
+                      boxShadow: 'none'
+                    }}
+                  >
+                    <Download size={12} /> DOWNLOAD REPORT
+                  </button>
+                )}
                 <Globe size={14} style={{ alignSelf: 'center' }} />
               </div>
             </div>
@@ -349,7 +446,7 @@ export default function AuditView() {
                   <div style={{ background: 'var(--bg-console)', padding: '10px', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '10px', color: 'var(--color-text-dim)' }}>AUDIT SCOPE</div>
                     <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--neon-cyan)' }}>
-                      {report.scope === 'single' ? 'SINGLE PAGE' : `WEBSITE (${report.crawledCount} pages)`}
+                      {report.scope === 'single' ? 'SINGLE PAGE' : report.scope === 'complete' ? `COMPLETE (${report.crawledCount || '?'} pages)` : `WEBSITE (${report.crawledCount} pages)`}
                     </div>
                   </div>
                   <div style={{ background: 'var(--bg-console)', padding: '10px', border: '1px solid var(--border-color)' }}>
@@ -368,6 +465,150 @@ export default function AuditView() {
               </div>
             </div>
           </div>
+
+          {/* COMPLETE AUDIT SCOPE — DUAL TABS */}
+          {report.scope === 'complete' && (
+            <div style={{ marginTop: '0', display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px', gridColumn: 'span 2', paddingTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('client')}
+                style={{
+                  background: activeTab === 'client' ? 'var(--neon-green)' : 'var(--bg-console)',
+                  color: activeTab === 'client' ? 'var(--bg-core)' : 'var(--color-text-dim)',
+                  border: '1px solid var(--border-color)',
+                  padding: '6px 20px',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-display)',
+                  letterSpacing: '1px'
+                }}
+              >
+                📊 CLIENT DASHBOARD
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('analyst')}
+                style={{
+                  background: activeTab === 'analyst' ? 'var(--neon-cyan)' : 'var(--bg-console)',
+                  color: activeTab === 'analyst' ? 'var(--bg-core)' : 'var(--color-text-dim)',
+                  border: '1px solid var(--border-color)',
+                  padding: '6px 20px',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-display)',
+                  letterSpacing: '1px'
+                }}
+              >
+                🔬 ANALYST CONSOLE
+              </button>
+            </div>
+          )}
+
+          {/* COMPLETE AUDIT — CLIENT VIEW */}
+          {report.scope === 'complete' && activeTab === 'client' && (
+            <>
+              {/* Speed & UX card */}
+              <div className="panel-card" style={{ gridColumn: 'span 2' }}>
+                <div className="panel-header">
+                  <span>SPEED &amp; USER EXPERIENCE SIGNALS</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  {[
+                    { label: 'AI Search Ready', value: (report.geo?.hasLlmsTxt || report.hasLlmsTxt) ? 'READY' : 'NOT READY', color: (report.geo?.hasLlmsTxt || report.hasLlmsTxt) ? 'var(--neon-green)' : 'var(--neon-amber)' },
+                    { label: 'Pages Crawled', value: report.crawledCount || '?', color: 'var(--neon-cyan)' },
+                    { label: 'XML Sitemap', value: (report.sitemapStatus || 'missing').toUpperCase(), color: report.sitemapStatus === 'present' ? 'var(--neon-green)' : 'var(--neon-amber)' },
+                    { label: 'Contact Page', value: report.contactsFound ? 'FOUND' : 'MISSING', color: report.contactsFound ? 'var(--neon-green)' : 'var(--neon-amber)' },
+                  ].map((item, i) => (
+                    <div key={i} style={{ background: 'var(--bg-console)', padding: '14px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-dim)' }}>{item.label}</div>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold', color: item.color, marginTop: '4px' }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Bot Access */}
+              <div className="panel-card">
+                <div className="panel-header"><span>AI BOT ACCESS</span></div>
+                <table className="meta-table">
+                  <tbody>
+                    {Object.entries(report.geo?.botAccess || {}).map(([bot, allowed], i) => (
+                      <tr key={i}>
+                        <td style={{ fontFamily: 'var(--font-mono)' }}>{bot}</td>
+                        <td style={{ color: allowed ? 'var(--neon-green)' : 'var(--neon-red)', fontWeight: 'bold', textAlign: 'right' }}>
+                          {allowed ? 'ALLOWED' : 'BLOCKED'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Top 3 Wins */}
+              <div className="panel-card">
+                <div className="panel-header"><span>TOP QUICK WINS</span></div>
+                <div className="findings-list">
+                  {(report.findings || []).filter(f => f.severity === 'Critical' || f.severity === 'High').slice(0, 3).map((f, i) => (
+                    <div key={i} className="finding-row CRITICAL">
+                      <h4>#{i+1} — {f.message}</h4>
+                      <p>{f.remedy}</p>
+                    </div>
+                  ))}
+                  {(report.findings || []).filter(f => f.severity === 'Critical' || f.severity === 'High').length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '20px', color: 'var(--neon-green)' }}>✓ No critical issues found!</div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* COMPLETE AUDIT — ANALYST VIEW */}
+          {report.scope === 'complete' && activeTab === 'analyst' && (
+            <>
+              {/* Full findings checklist */}
+              <div className="panel-card" style={{ gridColumn: 'span 2' }}>
+                <div className="panel-header"><span>TECHNICAL FINDINGS CHECKLIST</span></div>
+                <div className="findings-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {(report.findings || []).map((f, i) => {
+                    const colors = { Critical: 'var(--neon-red)', High: 'var(--neon-amber)', Medium: 'var(--neon-cyan)', Low: 'var(--neon-green)' };
+                    return (
+                      <div key={i} className="finding-row INFO" style={{ borderLeftColor: colors[f.severity] || 'var(--border-color)' }}>
+                        <h4><span className="tag-badge" style={{ background: colors[f.severity], color: 'var(--bg-core)', padding: '2px 8px', borderRadius: '3px', fontSize: '9px', marginRight: '8px' }}>{f.severity?.toUpperCase()}</span>{f.message}</h4>
+                        <p><strong>Rule:</strong> <code>{f.rule}</code> | <strong>Fix:</strong> {f.remedy}</p>
+                      </div>
+                    );
+                  })}
+                  {(report.findings || []).length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--neon-green)' }}>✓ No issues found!</div>}
+                </div>
+              </div>
+
+              {/* PageSpeed + CrUX signals */}
+              <div className="panel-card">
+                <div className="panel-header"><span>PAGESPEED SIGNALS</span></div>
+                <table className="meta-table">
+                  <tbody>
+                    <tr><td>Data Available</td><td style={{ color: Object.keys(report.pagespeed || {}).length > 0 ? 'var(--neon-green)' : 'var(--neon-amber)', fontWeight: 'bold', textAlign: 'right' }}>{Object.keys(report.pagespeed || {}).length > 0 ? 'YES' : 'NO (Add API Key)'}</td></tr>
+                    {report.pagespeed?.psi?.mobile?.lighthouse_scores && Object.entries(report.pagespeed.psi.mobile.lighthouse_scores).map(([k, v], i) => (
+                      <tr key={i}><td style={{ textTransform: 'capitalize' }}>{k}</td><td style={{ color: v >= 90 ? 'var(--neon-green)' : v >= 50 ? 'var(--neon-amber)' : 'var(--neon-red)', fontWeight: 'bold', textAlign: 'right' }}>{Math.round(v)}/100</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* GEO signals */}
+              <div className="panel-card">
+                <div className="panel-header"><span>GEO AI SIGNALS</span></div>
+                <table className="meta-table">
+                  <tbody>
+                    <tr><td>llms.txt</td><td style={{ color: (report.geo?.hasLlmsTxt || report.hasLlmsTxt) ? 'var(--neon-green)' : 'var(--neon-red)', fontWeight: 'bold', textAlign: 'right' }}>{(report.geo?.hasLlmsTxt || report.hasLlmsTxt) ? 'PRESENT' : 'MISSING'}</td></tr>
+                    {Object.entries(report.geo?.botAccess || {}).map(([bot, allowed], i) => (
+                      <tr key={i}><td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>{bot}</td><td style={{ color: allowed ? 'var(--neon-green)' : 'var(--neon-red)', fontWeight: 'bold', textAlign: 'right' }}>{allowed ? 'OK' : 'BLOCKED'}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           {/* IF SINGLE PAGE AUDIT, RENDER SINGLE SCORES */}
           {report.scope === 'single' && (

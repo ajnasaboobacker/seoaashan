@@ -49,36 +49,11 @@ const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&!';
 //  HOOK: SOUND FX (Web Audio API)
 // ═══════════════════════════════════════════════════════════════
 function useSoundFX() {
-  const ctxRef = useRef(null);
-
-  const getCtx = () => {
-    if (!ctxRef.current) {
-      ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    return ctxRef.current;
-  };
-
-  const tone = (freq, dur = 0.1, type = 'sine', vol = 0.07) => {
-    try {
-      const ctx = getCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = freq;
-      osc.type = type;
-      gain.gain.setValueAtTime(vol, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + dur);
-    } catch (_) {}
-  };
-
   return {
-    focus:   () => tone(880, 0.06, 'sine', 0.04),
-    click:   () => tone(1200, 0.04, 'square', 0.03),
-    error:   () => { tone(180, 0.25, 'sawtooth', 0.1); setTimeout(() => tone(140, 0.3, 'sawtooth', 0.07), 170); },
-    success: () => [440, 554, 659, 880].forEach((f, i) => setTimeout(() => tone(f, 0.18, 'sine', 0.1), i * 80)),
+    focus:   () => {},
+    click:   () => {},
+    error:   () => {},
+    success: () => {},
   };
 }
 
@@ -748,8 +723,10 @@ export default function LoginView({ onLoginSuccess }) {
           else throw new Error('No access token returned');
         }
       } else {
-        await new Promise(r => setTimeout(r, 2400));
-        setError('CLOUD INTERFACE UNAVAILABLE. CONTACT SYSTEM ADMINISTRATOR.');
+        // LOCAL MODE — accept any credentials and issue a local guest token
+        await new Promise(r => setTimeout(r, 1800));
+        sfx.success();
+        onLoginSuccess('local-guest-token', email || 'guest@localhost.local', 'local');
       }
     } catch (err) {
       setError(`AUTHENTICATION_ERROR // ${(err.message || String(err)).toUpperCase()}`);
@@ -988,9 +965,8 @@ export default function LoginView({ onLoginSuccess }) {
                   </motion.div>
                 )}
 
-                {/* Submit Button */}
-                {config.cloudEnabled && (
-                  <motion.div variants={itemV} style={{ position: 'relative', overflow: 'hidden', width: '100%', marginTop: '2px' }}>
+                {/* Submit Button — visible in BOTH cloud and local mode */}
+                <motion.div variants={itemV} style={{ position: 'relative', overflow: 'hidden', width: '100%', marginTop: '2px' }}>
                     {!loading && (
                       <motion.div 
                         animate={{ x: ['-100%', '200%'] }}
@@ -1018,7 +994,7 @@ export default function LoginView({ onLoginSuccess }) {
                         <><motion.div animate={{ rotate:360 }} transition={{ duration:0.9, repeat:Infinity, ease:'linear' }}><Activity size={14}/></motion.div>PROCESSING...</>
                       ) : mode === 'signin' ? (
                         <>
-                          ACCESS // SIGN IN{" "}
+                          {config.cloudEnabled ? 'ACCESS // SIGN IN' : 'ACCESS // LOCAL MODE'}{" "}
                           <motion.span
                             animate={submitHovered ? { x: [0, 5, 0] } : { x: 0 }}
                             transition={submitHovered ? { repeat: Infinity, duration: 0.8, ease: 'easeInOut' } : {}}
@@ -1041,7 +1017,27 @@ export default function LoginView({ onLoginSuccess }) {
                       )}
                     </motion.button>
                   </motion.div>
-                )}
+
+                  {/* Guest bypass — only in LOCAL mode */}
+                  {!config.cloudEnabled && (
+                    <motion.div variants={itemV} style={{ marginTop: '10px' }}>
+                      <motion.button
+                        type="button"
+                        onMouseEnter={() => setGuestHovered(true)}
+                        onMouseLeave={() => setGuestHovered(false)}
+                        whileHover={{ scale: 1.02, opacity: 1 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => {
+                          sfx.click();
+                          onLoginSuccess('local-guest-token', 'guest@localhost.local', 'local');
+                        }}
+                        style={{ width: '100%', background: 'transparent', border: `1px solid ${theme.primary}55`, color: theme.primary, padding: '10px 24px', fontFamily: 'var(--font-mono)', fontSize: '11px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: 0.75, transition: 'opacity 0.2s' }}
+                      >
+                        <Zap size={12} /> CONTINUE AS GUEST (LOCAL MODE)
+                      </motion.button>
+                    </motion.div>
+                  )}
+
               </motion.form>
 
               {/* Forgot Passkey link */}
@@ -1054,6 +1050,7 @@ export default function LoginView({ onLoginSuccess }) {
                   </motion.button>
                 </motion.div>
               )}
+
 
 
 

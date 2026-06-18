@@ -687,6 +687,102 @@ app.post('/api/audit/full', async (req, res) => {
   }
 });
 
+// 11b. Complete multi-signal audit (BFS crawl + PageSpeed + CrUX + GEO)
+app.post('/api/audit/complete', async (req, res) => {
+  const { url, maxPages = 30 } = req.body;
+  if (!url || !isValidUrl(url)) {
+    return res.status(400).json({ error: 'Valid URL is required' });
+  }
+
+  const customEnv = getCustomEnv(req);
+
+  try {
+    // Run all audits concurrently — failure of any one should not block the rest
+    const [crawlResult, pagespeedResult, cruxResult, geoResult] = await Promise.allSettled([
+      // 1. Full BFS crawl
+      runPythonScript('full_website_audit.py', [url, '--max-pages', String(maxPages), '--json'], null, customEnv),
+      // 2. PageSpeed Insights (mobile + desktop)
+      runPythonScript('pagespeed_check.py', [url, '--strategy', 'both', '--json'], null, customEnv)
+        .catch(err => err.stdout ? { stdout: err.stdout } : Promise.reject(err)),
+      // 3. CrUX 25-week history
+      runPythonScript('crux_history.py', [url, '--json'], null, customEnv),
+      // 4. GEO check: fetch robots.txt, llms.txt, parse paragraphs
+      (async () => {
+        const origin = new URL(url).origin;
+        const [robotsRes, llmsRes, pageRes] = await Promise.allSettled([
+          runPythonScript('fetch_page.py', [`${origin}/robots.txt`], null, customEnv),
+          runPythonScript('fetch_page.py', [`${origin}/llms.txt`],   null, customEnv),
+          runPythonScript('fetch_page.py', [url, '--render', 'auto'], null, customEnv),
+        ]);
+        const robotsTxt = robotsRes.status === 'fulfilled' ? robotsRes.value.stdout : '';
+        const llmsTxt   = llmsRes.status   === 'fulfilled' ? llmsRes.value.stdout   : '';
+        const html      = pageRes.status   === 'fulfilled' ? pageRes.value.stdout   : '';
+
+        const crawlers = ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'OAI-SearchBot'];
+        const botAccess = {};
+        crawlers.forEach(bot => {
+          const m = robotsTxt.match(new RegExp(`User-agent:\\s*\\*?\\s*${bot}[\\s\\S]*?(?:User-agent:|$)`, 'i'));
+          botAccess[bot] = m ? !m[0].match(/Disallow:\s*\/\s*$/i) : true;
+        });
+        return JSON.stringify({
+          botAccess,
+          hasLlmsTxt: llmsTxt.trim().length > 0 && !llmsTxt.includes('404'),
+          htmlLength: html.length
+        });
+      })()
+    ]);
+
+    // Parse results — use safe empty fallbacks on failures
+    let crawlData = {};
+    if (crawlResult.status === 'fulfilled') {
+      try { crawlData = JSON.parse(crawlResult.value.stdout); } catch (_) {}
+    } else {
+      console.error('Complete audit – crawl failed:', crawlResult.reason?.stderr || crawlResult.reason);
+    }
+
+    let pagespeedData = {};
+    if (pagespeedResult.status === 'fulfilled') {
+      try { pagespeedData = JSON.parse(pagespeedResult.value.stdout); } catch (_) {}
+    } else {
+      console.error('Complete audit – pagespeed failed:', pagespeedResult.reason?.stderr || pagespeedResult.reason);
+    }
+
+    let cruxData = {};
+    if (cruxResult.status === 'fulfilled') {
+      try { cruxData = JSON.parse(cruxResult.value.stdout); } catch (_) {}
+    } else {
+      console.error('Complete audit – crux failed:', cruxResult.reason?.stderr || cruxResult.reason);
+    }
+
+    let geoData = {};
+    if (geoResult.status === 'fulfilled') {
+      try { geoData = JSON.parse(geoResult.value); } catch (_) {}
+    } else {
+      console.error('Complete audit – geo failed:', geoResult.reason?.stderr || geoResult.reason);
+    }
+
+    // Merge into unified payload
+    res.json({
+      status: 'ok',
+      scope: 'complete',
+      url,
+      domain: new URL(url).hostname,
+      // Crawl fields (pass-through)
+      ...crawlData,
+      // Enrichment fields
+      pagespeed: pagespeedData,
+      crux: cruxData,
+      geo: geoData,
+    });
+  } catch (err) {
+    console.error('Error running complete audit:', err);
+    res.status(500).json({
+      error: 'Failed to run complete audit',
+      details: err.stderr || err.toString() || (err.error && err.error.message)
+    });
+  }
+});
+
 // 12. Full site report PDF/HTML compiler
 app.post('/api/report/pdf', async (req, res) => {
   const { data, domain } = req.body;
@@ -698,6 +794,10 @@ app.post('/api/report/pdf', async (req, res) => {
   let reportType = 'full';
   if (data.scope === 'single') {
     reportType = 'crawl-single';
+  } else if (data.scope === 'complete' && req.body.reportType === 'complete-client') {
+    reportType = 'complete-client';
+  } else if (data.scope === 'complete' && req.body.reportType === 'complete-analyst') {
+    reportType = 'complete-analyst';
   } else if (data.crawledPages) {
     reportType = 'crawl-full';
   }

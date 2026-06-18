@@ -2337,6 +2337,400 @@ def _build_crawl_full_report(domain, timestamp, data, chart_paths):
     return "\n".join(lines)
 
 
+
+# ─── Complete Audit Report Builders ─────────────────────────────────────────
+
+def _build_complete_client_report(domain, timestamp, data, chart_paths):
+    """Build a non-technical Executive Client Report from a complete audit."""
+    url = data.get("url", f"https://{domain}")
+    seo_score = data.get("seoScore", 0)
+    crawled_count = data.get("crawledCount", 0)
+    sitemap_status = data.get("sitemapStatus", "missing").upper()
+    has_llms = data.get("hasLlmsTxt", False)
+    geo = data.get("geo", {})
+    pagespeed = data.get("pagespeed", {})
+    crux = data.get("crux", {})
+    findings_list = data.get("findings", [])
+    scores = data.get("categoryScores", {})
+
+    lines = []
+
+    # 1. Executive Summary
+    lines.append('\n<!-- ======================================================= 1. EXECUTIVE SUMMARY === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>1. Business Performance Overview</h2>')
+    lines.append(f'    <div class="section-score" style="color: {_score_color(seo_score)}">{seo_score}/100</div>')
+    lines.append('  </div>')
+    lines.append(f'  <p>This report presents the key findings from a comprehensive SEO audit of '
+                 f'<strong>{domain}</strong> conducted on {timestamp}. The audit covered {crawled_count} pages '
+                 f'and includes real-world user experience data, search engine visibility, and AI readiness signals.</p>')
+
+    # Big metric cards
+    lines.append('  <div class="four-col">')
+    score_color = _score_color(seo_score)
+    score_label = "EXCELLENT" if seo_score >= 90 else ("GOOD" if seo_score >= 70 else ("NEEDS WORK" if seo_score >= 50 else "CRITICAL"))
+    lines.append(f'    <div class="col">{_metric_card(f"{seo_score}/100", f"SEO Health — {score_label}", score_color)}</div>')
+    lines.append(f'    <div class="col">{_metric_card(crawled_count, "Pages Analysed", BRAND["primary"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card(sitemap_status, "Site Map Status", BRAND["success"] if "PRESENT" in sitemap_status else BRAND["warning"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card("Ready" if has_llms else "Not Ready", "AI Search Ready", BRAND["success"] if has_llms else BRAND["warning"])}</div>')
+    lines.append('  </div>')
+
+    # Top 3 wins
+    critical_issues = [f for f in findings_list if f.get("severity") in ("Critical", "High")][:3]
+    if critical_issues:
+        lines.append('  <h3>🎯 Top 3 Quick Wins for Your Business</h3>')
+        for i, f in enumerate(critical_issues, 1):
+            lines.append(f'  <div class="action-item critical">')
+            lines.append(f'    <h4>#{i} — {f.get("message", "")}</h4>')
+            lines.append(f'    <p><strong>Why it matters</strong>: {f.get("remedy", "")}</p>')
+            lines.append('  </div>')
+    lines.append('</div>')
+
+    # 2. Category Health (non-technical bars)
+    lines.append('\n<!-- ======================================================= 2. CATEGORY HEALTH === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>2. Your Website Health at a Glance</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>Each area has been rated on a scale of 0–100. Green means excellent, amber means improvement needed, red means urgent attention required.</p>')
+
+    chart_path = chart_paths.get("crawl_categories_path", "")
+    if chart_path:
+        lines.append('  <div class="chart-container">')
+        lines.append(f'    <img src="file://{chart_path}" style="width: 80%;" alt="Category Health Scores">')
+        lines.append('    <div class="chart-caption">Figure 1: Your site\'s health score across 7 critical search factors.</div>')
+        lines.append('  </div>')
+
+    categories_weights = [
+        ("technical", "Technical Foundation", "22%", "How well search engines can crawl and index your site."),
+        ("content", "Content Quality", "23%", "How relevant, detailed, and trustworthy your content is."),
+        ("onpage", "Page Optimisation", "20%", "Title tags, headings, and descriptions search engines use."),
+        ("schema", "Rich Data Markup", "10%", "Structured data that powers star ratings, FAQs, and rich results."),
+        ("performance", "Speed & Experience", "10%", "How fast your site loads for real visitors."),
+        ("geo", "AI Search Visibility", "10%", "Whether AI tools like ChatGPT and Perplexity can cite your site."),
+        ("images", "Image Accessibility", "5%", "Alt text coverage helping visually impaired users and image search."),
+    ]
+    lines.append('  <table>')
+    lines.append('    <thead>')
+    lines.append('      <tr><th>Area</th><th>Status</th><th>Score</th><th>What it means for you</th></tr>')
+    lines.append('    </thead>')
+    lines.append('    <tbody>')
+    for key, label, weight, desc in categories_weights:
+        score = scores.get(key, 0)
+        cls = "status-pass" if score >= 90 else ("status-warn" if score >= 50 else "status-fail")
+        badge = "Excellent" if score >= 90 else ("Good" if score >= 70 else ("Needs Work" if score >= 50 else "Urgent"))
+        lines.append(f'      <tr><td><strong>{label}</strong></td><td class="{cls}">{badge}</td><td>{score}/100</td><td style="font-size:8.5pt">{desc}</td></tr>')
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    lines.append('</div>')
+
+    # 3. Speed & User Experience (client-friendly)
+    lines.append('\n<!-- ======================================================= 3. SPEED === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>3. Website Speed &amp; Visitor Experience</h2>')
+    lines.append('  </div>')
+    # Lighthouse gauges chart
+    gauges_path = chart_paths.get("gauges_path", "")
+    if gauges_path:
+        lines.append('  <div class="chart-container">')
+        lines.append(f'    <img src="file://{gauges_path}" style="width:80%;" alt="Lighthouse Score Gauges">')
+        lines.append('    <div class="chart-caption">Figure 2: Google Lighthouse performance scores (lab data).</div>')
+        lines.append('  </div>')
+    else:
+        lines.append('  <div class="highlight"><strong>Note:</strong> PageSpeed data was not available for this audit. Please add a Google API key in Settings to unlock real-time performance scores.</div>')
+
+    # CrUX friendly summary
+    crux_metrics = crux.get("metrics", {}) if isinstance(crux, dict) else {}
+    if crux_metrics:
+        lines.append('  <h3>Real Visitor Experience (Google Field Data)</h3>')
+        lines.append('  <p>These numbers reflect how real visitors experienced your site over the last 28 days.</p>')
+        metric_labels = {
+            "largest_contentful_paint": "Page Load Speed (LCP)",
+            "interaction_to_next_paint": "Responsiveness (INP)",
+            "cumulative_layout_shift": "Visual Stability (CLS)",
+            "first_contentful_paint": "First Paint (FCP)",
+        }
+        lines.append('  <table>')
+        lines.append('    <thead><tr><th>Experience Factor</th><th>Rating</th><th>Value</th></tr></thead>')
+        lines.append('    <tbody>')
+        for key, friendly_label in metric_labels.items():
+            m = crux_metrics.get(key)
+            if m and isinstance(m, dict):
+                cat = m.get("category", "unknown")
+                p75 = m.get("percentile_p75", m.get("p75", "?"))
+                cls = _rating_css_class(cat)
+                friendly_cat = {"FAST": "Good", "AVERAGE": "Needs Work", "SLOW": "Poor", "GOOD": "Good", "NEEDS_IMPROVEMENT": "Needs Work", "POOR": "Poor"}.get(str(cat).upper().replace("-", "_"), cat)
+                lines.append(f'      <tr><td>{friendly_label}</td><td class="{cls}">{friendly_cat}</td><td>{p75}</td></tr>')
+        lines.append('    </tbody>')
+        lines.append('  </table>')
+    lines.append('</div>')
+
+    # 4. AI Search Readiness
+    lines.append('\n<!-- ======================================================= 4. AI SEARCH === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>4. AI Search &amp; Future Visibility</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>AI tools like ChatGPT, Perplexity, and Google AI Overviews now answer questions by citing specific websites. This section shows how discoverable your site is to these systems.</p>')
+
+    bot_access = geo.get("botAccess", {})
+    has_llms_txt = geo.get("hasLlmsTxt", has_llms)
+    lines.append('  <table>')
+    lines.append('    <thead><tr><th>AI Tool</th><th>Can Access Your Site?</th></tr></thead>')
+    lines.append('    <tbody>')
+    bot_friendly = {"GPTBot": "ChatGPT", "ClaudeBot": "Claude (Anthropic)", "PerplexityBot": "Perplexity AI", "OAI-SearchBot": "OpenAI Search"}
+    for bot, friendly in bot_friendly.items():
+        allowed = bot_access.get(bot, True)
+        cls = "status-pass" if allowed else "status-fail"
+        label = "Yes — allowed" if allowed else "No — blocked"
+        lines.append(f'      <tr><td>{friendly}</td><td class="{cls}">{label}</td></tr>')
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+
+    llms_box = "success-box" if has_llms_txt else "highlight"
+    llms_msg = ("<strong>llms.txt found!</strong> Your site has an AI-readable guide helping AI tools understand your content structure."
+                if has_llms_txt else
+                "<strong>llms.txt is missing.</strong> Adding this file helps AI search engines understand and cite your content more accurately.")
+    lines.append(f'  <div class="{llms_box}">{llms_msg}</div>')
+    lines.append('</div>')
+
+    # 5. Implementation Roadmap
+    lines.append('\n<!-- ======================================================= 5. ROADMAP === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>5. Recommended Action Plan</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>Based on this audit, here is a prioritised 4-week improvement plan to maximise your search visibility.</p>')
+    lines.append('  <table>')
+    lines.append('    <thead><tr><th>Phase</th><th>Focus Area</th><th>Expected Impact</th></tr></thead>')
+    lines.append('    <tbody>')
+    n_critical = len([f for f in findings_list if f.get("severity") == "Critical"])
+    n_high = len([f for f in findings_list if f.get("severity") == "High"])
+    lines.append(f'      <tr><td><strong>Week 1</strong></td><td>Fix {n_critical} critical and {n_high} high-priority issues</td><td class="status-pass">Immediate ranking improvement</td></tr>')
+    lines.append('      <tr><td><strong>Week 2</strong></td><td>Optimise page speed and Core Web Vitals</td><td class="status-pass">Better user experience &amp; lower bounce rate</td></tr>')
+    lines.append('      <tr><td><strong>Week 3</strong></td><td>Add missing schema markup and structured data</td><td class="status-warn">Rich results in Google search</td></tr>')
+    lines.append('      <tr><td><strong>Week 4</strong></td><td>Add llms.txt and improve AI search readiness</td><td class="status-warn">Visibility in AI-powered search tools</td></tr>')
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    lines.append('</div>')
+
+    return "\n".join(lines)
+
+
+def _build_complete_analyst_report(domain, timestamp, data, chart_paths):
+    """Build a detailed Technical SEO Blueprint for an analyst/developer from a complete audit."""
+    url = data.get("url", f"https://{domain}")
+    seo_score = data.get("seoScore", 0)
+    crawled_count = data.get("crawledCount", 0)
+    findings_list = data.get("findings", [])
+    scores = data.get("categoryScores", {})
+    geo = data.get("geo", {})
+    pagespeed = data.get("pagespeed", {})
+    crux = data.get("crux", {})
+
+    lines = []
+
+    # 1. Technical Summary
+    lines.append('\n<!-- ======================================================= 1. TECH SUMMARY === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>1. Technical Audit Summary</h2>')
+    lines.append(f'    <div class="section-score" style="color: {_score_color(seo_score)}">{seo_score}/100</div>')
+    lines.append('  </div>')
+    lines.append(f'  <p>Complete multi-signal SEO audit of <strong>{url}</strong> | {timestamp} | '
+                 f'{crawled_count} pages BFS crawl + PageSpeed Insights + CrUX field data + GEO AI readiness.</p>')
+    lines.append('  <div class="four-col">')
+    lines.append(f'    <div class="col">{_metric_card(f"{seo_score}/100", "Health Index", _score_color(seo_score))}</div>')
+    lines.append(f'    <div class="col">{_metric_card(crawled_count, "Pages Crawled", BRAND["primary"])}</div>')
+    n_critical = len([f for f in findings_list if f.get("severity") == "Critical"])
+    n_high = len([f for f in findings_list if f.get("severity") == "High"])
+    lines.append(f'    <div class="col">{_metric_card(n_critical, "Critical Issues", BRAND["danger"] if n_critical else BRAND["success"])}</div>')
+    lines.append(f'    <div class="col">{_metric_card(n_high, "High Priority Fixes", BRAND["warning"] if n_high else BRAND["success"])}</div>')
+    lines.append('  </div>')
+    lines.append('</div>')
+
+    # 2. Category Scores
+    lines.append('\n<!-- ======================================================= 2. CATEGORY SCORES === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>2. Audit Category Breakdown</h2>')
+    lines.append('  </div>')
+    chart_path = chart_paths.get("crawl_categories_path", "")
+    if chart_path:
+        lines.append('  <div class="chart-container">')
+        lines.append(f'    <img src="file://{chart_path}" style="width:80%;" alt="Category Scores">')
+        lines.append('    <div class="chart-caption">Fig 1: SEO category scores (/100) across 7 signal dimensions.</div>')
+        lines.append('  </div>')
+    categories = [
+        ("technical", "Technical SEO", "22%"),
+        ("content", "Content Quality", "23%"),
+        ("onpage", "On-Page SEO", "20%"),
+        ("schema", "Schema / Structured Data", "10%"),
+        ("performance", "Performance (CWV)", "10%"),
+        ("geo", "AI Search Readiness (GEO)", "10%"),
+        ("images", "Image Alt Coverage", "5%"),
+    ]
+    lines.append('  <table>')
+    lines.append('    <thead><tr><th>Category</th><th>Score</th><th>Weight</th><th>Contribution</th></tr></thead>')
+    lines.append('    <tbody>')
+    for key, label, weight in categories:
+        score = scores.get(key, 0)
+        contrib = score * float(weight.replace("%", "")) / 100
+        cls = "status-pass" if score >= 90 else ("status-warn" if score >= 50 else "status-fail")
+        lines.append(f'      <tr><td>{label}</td><td class="{cls}">{score}/100</td><td>{weight}</td><td>{contrib:.2f}</td></tr>')
+    lines.append(f'      <tr style="font-weight:bold;"><td>TOTAL</td><td></td><td>100%</td><td style="color:{_score_color(seo_score)}">{seo_score}/100</td></tr>')
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    lines.append('</div>')
+
+    # 3. Findings Checklist (full technical detail)
+    lines.append('\n<!-- ======================================================= 3. FINDINGS === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>3. Prioritised Issue Checklist</h2>')
+    lines.append('  </div>')
+
+    def format_finding(f, lbl, cls):
+        return (
+            f'  <div class="action-item {cls}">\n'
+            f'    <h4><span class="priority-tag priority-{cls}">{lbl}</span> {f.get("message", "")}</h4>\n'
+            f'    <p><strong>Category</strong>: {f.get("category", "")} | <strong>Rule</strong>: <code>{f.get("rule", "")}</code></p>\n'
+            f'    <p><strong>Fix</strong>: {f.get("remedy", "")}</p>\n'
+            f'  </div>'
+        )
+
+    sev_groups = [
+        ("Critical", "CRITICAL", "critical", "🔴 Critical — Fix Immediately"),
+        ("High", "HIGH", "high", "🟠 High Priority — Fix Within 1 Week"),
+        ("Medium", "MEDIUM", "medium", "🟡 Medium — Fix Within 1 Month"),
+        ("Low", "LOW", "low", "🟢 Low — Long-term Opportunities"),
+    ]
+    any_found = False
+    for sev, lbl, cls, heading in sev_groups:
+        group = [f for f in findings_list if f.get("severity") == sev]
+        if group:
+            any_found = True
+            lines.append(f'  <h3>{heading}</h3>')
+            for f in group:
+                lines.append(format_finding(f, lbl, cls))
+            lines.append('')
+    if not any_found:
+        lines.append('  <div class="success-box"><strong>All checks passed!</strong> No optimization issues detected.</div>')
+    lines.append('</div>')
+
+    # 4. PageSpeed Lab Diagnostics
+    lines.append('\n<!-- ======================================================= 4. PAGESPEED === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>4. PageSpeed Insights &amp; Core Web Vitals</h2>')
+    lines.append('  </div>')
+
+    gauges_path = chart_paths.get("gauges_path", "")
+    if gauges_path:
+        lines.append('  <div class="chart-container">')
+        lines.append(f'    <img src="file://{gauges_path}" style="width:80%;" alt="Lighthouse Gauges">')
+        lines.append('    <div class="chart-caption">Fig 2: Lighthouse lab scores (mobile).</div>')
+        lines.append('  </div>')
+
+    # CrUX field data
+    crux_metrics = crux.get("metrics", {}) if isinstance(crux, dict) else {}
+    if crux_metrics:
+        lines.append('  <h3>CrUX Field Data (28-day p75)</h3>')
+        lines.append('  <table>')
+        lines.append('    <thead><tr><th>Metric</th><th>p75 Value</th><th>Rating</th><th>Good Threshold</th><th>Poor Threshold</th></tr></thead>')
+        lines.append('    <tbody>')
+        for name, m in crux_metrics.items():
+            if isinstance(m, dict):
+                p75 = m.get("percentile_p75", m.get("p75", "N/A"))
+                cat = m.get("category", "?")
+                cls = _rating_css_class(cat)
+                label = m.get("label", name)
+                good_t = m.get("good_threshold", "")
+                poor_t = m.get("poor_threshold", "")
+                lines.append(f'      <tr><td>{label}</td><td>{p75}</td><td class="{cls}">{cat}</td><td>{good_t}</td><td>{poor_t}</td></tr>')
+        lines.append('    </tbody>')
+        lines.append('  </table>')
+
+    # Failed PageSpeed audits
+    psi_inner = pagespeed.get("psi", {}) if isinstance(pagespeed, dict) else {}
+    mobile_psi = psi_inner.get("mobile", {}) if isinstance(psi_inner, dict) else {}
+    failed_audits = mobile_psi.get("failed_audits", []) if isinstance(mobile_psi, dict) else []
+    if failed_audits:
+        lines.append('  <h3>Failed Lighthouse Audits (Mobile)</h3>')
+        lines.append('  <table>')
+        lines.append('    <thead><tr><th>Audit</th><th>Score</th><th>Diagnostic</th></tr></thead>')
+        lines.append('    <tbody>')
+        for a in failed_audits[:25]:
+            score_pct = f"{a['score']:.0%}" if a.get("score") is not None else "fail"
+            lines.append(f'      <tr><td>{a.get("title", "")}</td><td class="status-fail">{score_pct}</td><td>{a.get("display", "")}</td></tr>')
+        lines.append('    </tbody>')
+        lines.append('  </table>')
+    else:
+        lines.append('  <div class="highlight"><strong>Note:</strong> Detailed PageSpeed data requires a valid Google API key in Settings.</div>')
+    lines.append('</div>')
+
+    # 5. GEO / Bot Access Diagnostic
+    lines.append('\n<!-- ======================================================= 5. GEO === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>5. GEO &amp; AI Bot Access Audit</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>robots.txt rule analysis for AI crawler access. Disallowed bots cannot cite this site in AI search answers.</p>')
+    bot_access = geo.get("botAccess", {})
+    has_llms_txt = geo.get("hasLlmsTxt", data.get("hasLlmsTxt", False))
+    lines.append('  <table>')
+    lines.append('    <thead><tr><th>Bot / Crawler</th><th>robots.txt Status</th></tr></thead>')
+    lines.append('    <tbody>')
+    for bot in ["GPTBot", "ClaudeBot", "PerplexityBot", "OAI-SearchBot"]:
+        allowed = bot_access.get(bot, True)
+        cls = "status-pass" if allowed else "status-fail"
+        lines.append(f'      <tr><td><code>{bot}</code></td><td class="{cls}">{"ALLOWED" if allowed else "BLOCKED"}</td></tr>')
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    llms_cls = "success-box" if has_llms_txt else "critical-box"
+    llms_msg = ("llms.txt <strong>present</strong> — AI agents can read your content index."
+                if has_llms_txt else
+                "llms.txt <strong>missing</strong> — Create <code>/llms.txt</code> to provide AI tools with a structured content index.")
+    lines.append(f'  <div class="{llms_cls}">{llms_msg}</div>')
+    lines.append('</div>')
+
+    # 6. Crawled Pages Index (full technical table)
+    lines.append('\n<!-- ======================================================= 6. CRAWLED PAGES === -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append('    <h2>6. Crawl Path Index</h2>')
+    lines.append('  </div>')
+    lines.append('  <p>Full BFS crawl output. Response times > 1.5s and non-200 statuses are highlighted as performance concerns.</p>')
+    lines.append('  <table>')
+    lines.append('    <thead><tr><th>URL Path</th><th>Status</th><th>Words</th><th>Response (s)</th><th>Title</th></tr></thead>')
+    lines.append('    <tbody>')
+    pages = data.get("crawledPages", [])
+    for p in pages[:50]:
+        status = p.get("statusCode", 0)
+        status_cls = "status-pass" if status == 200 else "status-fail"
+        latency = p.get("responseTime", 0)
+        lat_cls = "status-pass" if latency <= 0.8 else ("status-warn" if latency <= 1.5 else "status-fail")
+        url_display = p.get("url", "").replace(url, "") or "/"
+        lines.append(
+            f'      <tr>'
+            f'<td style="word-break:break-all;font-family:monospace;font-size:7.5pt">{url_display}</td>'
+            f'<td class="{status_cls}" style="text-align:center">{status}</td>'
+            f'<td style="text-align:right">{p.get("wordCount", 0)}</td>'
+            f'<td class="{lat_cls}" style="text-align:right">{latency:.2f}</td>'
+            f'<td style="font-size:7.5pt">{p.get("title", "")[:40]}</td>'
+            f'</tr>'
+        )
+    if len(pages) > 50:
+        lines.append(f'      <tr><td colspan="5" style="text-align:center;font-style:italic">... and {len(pages)-50} more pages crawled.</td></tr>')
+    lines.append('    </tbody>')
+    lines.append('  </table>')
+    lines.append('</div>')
+
+    return "\n".join(lines)
+
+
 # ─── Report Assemblers ───────────────────────────────────────────────────────
 
 def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
@@ -2395,10 +2789,21 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
         if path:
             chart_paths["index_status_path"] = path
 
-    if report_type == "crawl-full":
+    if report_type in ("crawl-full", "complete-client", "complete-analyst"):
         path = chart_crawl_categories(data, charts_dir)
         if path:
             chart_paths["crawl_categories_path"] = path
+
+    if report_type in ("complete-client", "complete-analyst", "cwv-audit", "full"):
+        psi_data = data.get("pagespeed", data.get("psi", data))
+        if isinstance(psi_data, dict):
+            psi_inner = psi_data.get("psi", {})
+            mobile_data = psi_inner.get("mobile", psi_data) if isinstance(psi_inner, dict) else psi_data
+        else:
+            mobile_data = {}
+        path = chart_lighthouse_gauges(mobile_data, charts_dir)
+        if path:
+            chart_paths["gauges_path"] = path
 
     # ── Build HTML Sections ──────────────────────────────────────────────────
 
@@ -2440,6 +2845,51 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
         ]
         sections.append(_build_toc(toc_sections))
         sections.append(_build_crawl_full_report(domain, timestamp, data, chart_paths))
+        sections.append(_build_methodology_footer(domain, timestamp))
+
+    # ── COMPLETE-CLIENT report ────────────────────────────────────────────────
+    elif report_type == "complete-client":
+        seo_score = data.get("seoScore", 0)
+        crawled_count = data.get("crawledCount", 0)
+        sections.append(_build_title_page(
+            domain, "Executive SEO Performance Report",
+            "Business Impact &amp; Visibility Analysis",
+            score=seo_score,
+            score_label="Overall SEO Health Score",
+            meta_items=[timestamp, "Complete Multi-Signal Audit"],
+        ))
+        toc_sections = [
+            {"num": 1, "title": "Business Performance Overview", "subs": ["Health Score &amp; Quick Wins"]},
+            {"num": 2, "title": "Website Health at a Glance", "subs": ["Category Scores"]},
+            {"num": 3, "title": "Speed &amp; Visitor Experience", "subs": ["Lighthouse &amp; CrUX Field Data"]},
+            {"num": 4, "title": "AI Search &amp; Future Visibility", "subs": ["Bot Access &amp; llms.txt"]},
+            {"num": 5, "title": "Recommended Action Plan", "subs": ["4-Week Implementation Roadmap"]},
+        ]
+        sections.append(_build_toc(toc_sections))
+        sections.append(_build_complete_client_report(domain, timestamp, data, chart_paths))
+        sections.append(_build_methodology_footer(domain, timestamp))
+
+    # ── COMPLETE-ANALYST report ───────────────────────────────────────────────
+    elif report_type == "complete-analyst":
+        seo_score = data.get("seoScore", 0)
+        crawled_count = data.get("crawledCount", 0)
+        sections.append(_build_title_page(
+            domain, "Technical SEO Audit &amp; Developer Blueprint",
+            "Full-Stack Crawl + PageSpeed + CrUX + GEO Diagnostics",
+            score=seo_score,
+            score_label="SEO Health Index",
+            meta_items=[timestamp, f"BFS ({crawled_count} pages) + PSI + CrUX + GEO"],
+        ))
+        toc_sections = [
+            {"num": 1, "title": "Technical Audit Summary", "subs": ["Metrics &amp; Issue Count"]},
+            {"num": 2, "title": "Category Breakdown", "subs": ["Score by Signal Dimension"]},
+            {"num": 3, "title": "Prioritised Issue Checklist", "subs": ["Critical / High / Medium / Low"]},
+            {"num": 4, "title": "PageSpeed &amp; Core Web Vitals", "subs": ["Lighthouse + CrUX Field Data"]},
+            {"num": 5, "title": "GEO &amp; AI Bot Access", "subs": ["robots.txt + llms.txt Audit"]},
+            {"num": 6, "title": "Crawl Path Index", "subs": ["Status, Latency &amp; Word Count"]},
+        ]
+        sections.append(_build_toc(toc_sections))
+        sections.append(_build_complete_analyst_report(domain, timestamp, data, chart_paths))
         sections.append(_build_methodology_footer(domain, timestamp))
 
     # ── CWV-AUDIT report ─────────────────────────────────────────────────────
@@ -3071,7 +3521,7 @@ def main():
     )
     parser.add_argument(
         "--type", "-t",
-        choices=["cwv-audit", "gsc-performance", "indexation", "full", "crawl-single", "crawl-full"],
+        choices=["cwv-audit", "gsc-performance", "indexation", "full", "crawl-single", "crawl-full", "complete-client", "complete-analyst"],
         required=True,
         help="Report type",
     )
