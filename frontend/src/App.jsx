@@ -17,7 +17,8 @@ import CalculatorView from './components/CalculatorView';
 import ConsultantView from './components/ConsultantView';
 import GuidelineBrowserView from './components/GuidelineBrowserView';
 import ChecklistView from './components/ChecklistView';
-import { Shield, Sparkles, Terminal, FileCode, Clock, Code, Cpu, File, Link, Network, Search, Settings, LogOut, Database, User, Globe, CheckSquare, BookOpen, Brain, Calculator } from 'lucide-react';
+import HelpView from './components/HelpView';
+import { Shield, Sparkles, Terminal, FileCode, Clock, Code, Cpu, File, Link, Network, Search, Settings, LogOut, Database, User, Globe, CheckSquare, BookOpen, Brain, Calculator, HelpCircle } from 'lucide-react';
 
 // Setup global fetch interceptor to inject JWT token into all /api requests automatically
 const originalFetch = window.fetch;
@@ -225,6 +226,14 @@ export default function App() {
               <Settings size={15} /> Console Settings
             </button>
           </li>
+          <li className="nav-item">
+            <button 
+              className={`nav-btn ${view === 'help' ? 'active' : ''}`}
+              onClick={() => setView('help')}
+            >
+              <HelpCircle size={15} /> Console Help
+            </button>
+          </li>
         </nav>
 
         <div className="sidebar-footer">
@@ -272,6 +281,7 @@ export default function App() {
               {view === 'drift' && 'DEPLOYMENT DRIFT TRACKER'}
               {view === 'marketing' && 'DIGITAL MARKETING SUITE'}
               {view === 'settings' && 'CONSOLE SETTINGS'}
+              {view === 'help' && 'CONSOLE HELP MANUAL'}
             </h2>
             <p>
               {view === 'checklist' && 'Manage audit checkmarks dynamically, customize client severity rates, add notes, and compile reports.'}
@@ -291,6 +301,7 @@ export default function App() {
               {view === 'drift' && 'Compare deployment snapshots against SQLite baseline records to identify SEO regression.'}
               {view === 'marketing' && 'Audit tech stacks, trace redirect hops, inspect SSL sockets, parse DNS security, and calculate page carbon scores.'}
               {view === 'settings' && 'Update Google API credentials and manage active tenant authentication keys.'}
+              {view === 'help' && 'Read comprehensive descriptions of all console tools and launch utilities with single clicks.'}
             </p>
           </div>
         </div>
@@ -320,6 +331,7 @@ export default function App() {
             onLogout={handleLogout}
           />
         )}
+        {view === 'help' && <HelpView onNavigate={(targetView) => setView(targetView)} />}
       </main>
     </div>
   );
