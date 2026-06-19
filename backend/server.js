@@ -8,6 +8,7 @@ import fs from 'fs';
 import dns from 'dns';
 import tls from 'tls';
 import { saveCredentials, loadCredentials, verifySession, getInsforgeClient, isCloudEnabled } from './db.js';
+import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
@@ -1456,6 +1457,49 @@ app.post('/api/marketing/carbon', async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: 'Carbon audit check failed', details: err.toString() });
+  }
+});
+
+// 7. Gemini AI SEO Consultant
+app.post('/api/consultant', requireAuth, async (req, res) => {
+  const { vertical, demographics, anomalies, clientProblems } = req.body;
+  if (!vertical || !demographics || !anomalies) {
+    return res.status(400).json({ error: 'Vertical, target demographics, and observed anomalies are required.' });
+  }
+
+  const creds = req.credentials || {};
+  const apiKey = creds.googleApiKey || process.env.GOOGLE_API_KEY;
+
+  if (!apiKey) {
+    return res.status(400).json({ error: 'Google API key is not configured. Please set it in Console Settings.' });
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const prompt = `You are a Senior SEO Consultant. Solve specific client problems by tailoring a diagnostic roadmap to the following business details:
+- **Business Vertical**: ${vertical}
+- **Target Demographics**: ${demographics}
+- **Observed Anomalies**: ${anomalies}
+- **Specific Client Problems/Context**: ${clientProblems || 'None provided'}
+
+Provide a comprehensive, custom diagnostic roadmap.
+Your response MUST be formatted in clean Markdown and cover:
+1. **Executive Summary**: Analysis of the observed anomalies and their impact on this specific vertical.
+2. **Custom Audit Check Priorities**: Formulate custom priority checkmarks (e.g. Critical, High, Medium, Low) suited for this client.
+3. **Regional CDN & GEO Localization Strategy**: Specific content delivery network and regional SEO recommendations optimized for the target demographics.
+4. **Recommended Schema.org Models**: Specific schema models that will help rich snippet eligibility for this client (e.g., LocalBusiness, FAQPage, Product, BreadcrumbList, etc.).
+5. **Actionable Blueprints & Diagnostic Instructions**: Provide concrete examples (e.g. Nginx rules, headers, or HTML script blocks) to fix these issues.
+
+Write a clear, structured, developer-focused guide.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: prompt,
+    });
+
+    res.json({ result: response.text });
+  } catch (err) {
+    res.status(500).json({ error: 'Gemini API invocation failed', details: err.toString() });
   }
 });
 

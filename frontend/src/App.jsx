@@ -13,7 +13,11 @@ import ClusterView from './components/ClusterView';
 import LoginView from './components/LoginView';
 import SettingsView from './components/SettingsView';
 import MarketingHubView from './components/MarketingHubView';
-import { Shield, Sparkles, Terminal, FileCode, Clock, Code, Cpu, File, Link, Network, Search, Settings, LogOut, Database, User, Globe } from 'lucide-react';
+import CalculatorView from './components/CalculatorView';
+import ConsultantView from './components/ConsultantView';
+import GuidelineBrowserView from './components/GuidelineBrowserView';
+import ChecklistView from './components/ChecklistView';
+import { Shield, Sparkles, Terminal, FileCode, Clock, Code, Cpu, File, Link, Network, Search, Settings, LogOut, Database, User, Globe, CheckSquare, BookOpen, Brain, Calculator } from 'lucide-react';
 
 // Setup global fetch interceptor to inject JWT token into all /api requests automatically
 const originalFetch = window.fetch;
@@ -78,6 +82,22 @@ export default function App() {
           <div className="nav-section-title">AUDITS & HYGIENE</div>
           <li className="nav-item">
             <button 
+              className={`nav-btn ${view === 'checklist' ? 'active' : ''}`}
+              onClick={() => setView('checklist')}
+            >
+              <CheckSquare size={15} /> Active Checklist
+            </button>
+          </li>
+          <li className="nav-item">
+            <button 
+              className={`nav-btn ${view === 'guideline_browser' ? 'active' : ''}`}
+              onClick={() => setView('guideline_browser')}
+            >
+              <BookOpen size={15} /> Spec Index
+            </button>
+          </li>
+          <li className="nav-item">
+            <button 
               className={`nav-btn ${view === 'audit' ? 'active' : ''}`}
               onClick={() => setView('audit')}
             >
@@ -140,6 +160,14 @@ export default function App() {
           <div className="nav-section-title" style={{ marginTop: '8px' }}>CONTENT & AI SEARCH</div>
           <li className="nav-item">
             <button 
+              className={`nav-btn ${view === 'consultant' ? 'active' : ''}`}
+              onClick={() => setView('consultant')}
+            >
+              <Brain size={15} /> AI Consultant
+            </button>
+          </li>
+          <li className="nav-item">
+            <button 
               className={`nav-btn ${view === 'content' ? 'active' : ''}`}
               onClick={() => setView('content')}
             >
@@ -171,6 +199,14 @@ export default function App() {
               onClick={() => setView('speed')}
             >
               <Clock size={15} /> PageSpeed & CrUX
+            </button>
+          </li>
+          <li className="nav-item">
+            <button 
+              className={`nav-btn ${view === 'calculator' ? 'active' : ''}`}
+              onClick={() => setView('calculator')}
+            >
+              <Calculator size={15} /> Weighted Calculator
             </button>
           </li>
           <li className="nav-item">
@@ -219,10 +255,14 @@ export default function App() {
         <div className="view-header">
           <div>
             <h2>
+              {view === 'checklist' && 'ACTIVE AUDIT PLAYGROUND'}
+              {view === 'guideline_browser' && 'TECHNICAL SPECIFICATION INDEX'}
               {view === 'audit' && 'CRAWL AUDIT'}
               {view === 'page' && 'TAG INSPECTOR'}
               {view === 'content' && 'EEAT CONTENT QUALITY'}
+              {view === 'consultant' && 'GEMINI SEO CONSULTANT'}
               {view === 'speed' && 'PAGESPEED & CRUX HISTORIES'}
+              {view === 'calculator' && 'WEIGHTED CWV CALCULATOR'}
               {view === 'keyword' && 'KEYWORD PLANNER'}
               {view === 'cluster' && 'TOPIC CLUSTERING'}
               {view === 'schema' && 'SCHEMA HUB'}
@@ -234,10 +274,14 @@ export default function App() {
               {view === 'settings' && 'CONSOLE SETTINGS'}
             </h2>
             <p>
+              {view === 'checklist' && 'Manage audit checkmarks dynamically, customize client severity rates, add notes, and compile reports.'}
+              {view === 'guideline_browser' && 'Search standard guidelines technical taxonomy specs and copy Nginx/HTML repair blueprints.'}
               {view === 'audit' && 'Scan a domain, extract link indices, and audit against structural crawl guidelines.'}
               {view === 'page' && 'Inspect HTML document headings hierarchy, check missing image attributes, and extract schemas.'}
               {view === 'content' && 'Evaluate text files against Quality Rater Guidelines (QRG) low-value filler filters.'}
+              {view === 'consultant' && 'Formulate customized regional CDNs, Geo routing, and Schema.org roadmaps using Gemini AI.'}
               {view === 'speed' && 'Fetch current PageSpeed scores alongside 25 weeks of historical Core Web Vitals timeseries.'}
+              {view === 'calculator' && 'Calculate expected speed scores using weighted March 2024 Lighthouse algorithms (LCP 40%, INP 40%, CLS 20%).'}
               {view === 'keyword' && 'Query search volume, competition metrics, and bid costs alongside autocomplete suggestions.'}
               {view === 'cluster' && 'Group keywords into semantic silos, establish Pillar-Spoke structures, and map linking hierarchies.'}
               {view === 'schema' && 'Generate structured JSON-LD block codes and validate schemas for policy requirements.'}
@@ -252,10 +296,14 @@ export default function App() {
         </div>
 
         {/* Dynamic Panel */}
+        {view === 'checklist' && <ChecklistView />}
+        {view === 'guideline_browser' && <GuidelineBrowserView />}
         {view === 'audit' && <AuditView />}
         {view === 'page' && <PageView />}
         {view === 'content' && <ContentView />}
+        {view === 'consultant' && <ConsultantView />}
         {view === 'speed' && <SpeedView />}
+        {view === 'calculator' && <CalculatorView />}
         {view === 'keyword' && <KeywordView />}
         {view === 'cluster' && <ClusterView />}
         {view === 'schema' && <SchemaView />}

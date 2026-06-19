@@ -221,6 +221,97 @@ def profile(
     }
 
 
+def local_business(
+    name: str,
+    *,
+    address_street: Optional[str] = None,
+    address_city: Optional[str] = None,
+    address_zip: Optional[str] = None,
+    phone: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    price_range: Optional[str] = None,
+    opening_hours: Optional[str] = None,
+) -> dict:
+    """Build a LocalBusiness JSON-LD block."""
+    payload: dict = {
+        "@context": "https://schema.org",
+        "@type": "LocalBusiness",
+        "name": name,
+    }
+    
+    if address_street or address_city or address_zip:
+        addr: dict = {"@type": "PostalAddress"}
+        if address_street:
+            addr["streetAddress"] = address_street
+        if address_city:
+            addr["addressLocality"] = address_city
+        if address_zip:
+            addr["postalCode"] = address_zip
+        payload["address"] = addr
+        
+    if phone:
+        payload["telephone"] = phone
+        
+    if latitude is not None and longitude is not None:
+        payload["geo"] = {
+            "@type": "GeoCoordinates",
+            "latitude": float(latitude),
+            "longitude": float(longitude),
+        }
+        
+    if price_range:
+        payload["priceRange"] = price_range
+        
+    if opening_hours:
+        payload["openingHours"] = opening_hours
+        
+    return payload
+
+
+def faq(
+    questions: list[str],
+    answers: list[str],
+) -> dict:
+    """Build an FAQPage JSON-LD block."""
+    entities = []
+    # Ensure they map 1-to-1
+    for q, a in zip(questions, answers):
+        entities.append({
+            "@type": "Question",
+            "name": q,
+            "acceptedAnswer": {
+                "@type": "Answer",
+                "text": a
+            }
+        })
+    return {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": entities
+    }
+
+
+def breadcrumb(
+    names: list[str],
+    urls: list[str],
+) -> dict:
+    """Build a BreadcrumbList JSON-LD block."""
+    elements = []
+    for idx, (name, url) in enumerate(zip(names, urls)):
+        elements.append({
+            "@type": "ListItem",
+            "position": idx + 1,
+            "name": name,
+            "item": url
+        })
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": elements
+    }
+
+
 def _strip_nones(payload: dict) -> dict:
     """Recursively remove keys with value None — keeps the JSON-LD output
     tight without us writing manual ``if x is not None`` guards above."""
@@ -307,6 +398,25 @@ def main() -> int:
     prof.add_argument("--image")
     prof.add_argument("--job-title")
 
+    lb = sub.add_parser("local_business", help="LocalBusiness (address, coordinates, openingHours).")
+    lb.add_argument("--name", required=True)
+    lb.add_argument("--address-street")
+    lb.add_argument("--address-city")
+    lb.add_argument("--address-zip")
+    lb.add_argument("--phone")
+    lb.add_argument("--latitude", type=float)
+    lb.add_argument("--longitude", type=float)
+    lb.add_argument("--price-range")
+    lb.add_argument("--opening-hours")
+
+    fq = sub.add_parser("faq", help="FAQPage (questions and answers).")
+    fq.add_argument("--questions", nargs="*", required=True)
+    fq.add_argument("--answers", nargs="*", required=True)
+
+    bc = sub.add_parser("breadcrumb", help="BreadcrumbList (hierarchy navigation).")
+    bc.add_argument("--names", nargs="*", required=True)
+    bc.add_argument("--urls", nargs="*", required=True)
+
     args = parser.parse_args()
 
     if args.kind == "reservation":
@@ -338,6 +448,22 @@ def main() -> int:
             works_for=args.works_for, image=args.image,
             job_title=args.job_title,
         )
+    elif args.kind == "local_business":
+        payload = local_business(
+            args.name,
+            address_street=args.address_street,
+            address_city=args.address_city,
+            address_zip=args.address_zip,
+            phone=args.phone,
+            latitude=args.latitude,
+            longitude=args.longitude,
+            price_range=args.price_range,
+            opening_hours=args.opening_hours,
+        )
+    elif args.kind == "faq":
+        payload = faq(args.questions, args.answers)
+    elif args.kind == "breadcrumb":
+        payload = breadcrumb(args.names, args.urls)
     else:  # pragma: no cover — argparse rejects unknown sub-commands
         parser.error(f"Unknown kind {args.kind!r}")
         return 2

@@ -8,8 +8,12 @@ export default function SchemaView() {
     name: '', url: '', description: '', sameAs: '', knowsAbout: '', worksFor: '',
     merchant: '', orderUrl: '',
     provider: '', start: new Date().toISOString().slice(0, 16), partySize: '2',
-    headline: '', author: '', likes: ''
+    headline: '', author: '', likes: '',
+    addressStreet: '', addressCity: '', addressZip: '', phone: '',
+    latitude: '', longitude: '', priceRange: '$$', openingHours: 'Mo-Fr 09:00-17:00'
   });
+  const [faqPairs, setFaqPairs] = useState([{ question: '', answer: '' }]);
+  const [breadcrumbs, setBreadcrumbs] = useState([{ name: '', url: '' }]);
   const [generatedJson, setGeneratedJson] = useState('');
   const [validateJson, setValidateJson] = useState('');
   const [validationResult, setValidationResult] = useState(null);
@@ -55,6 +59,28 @@ export default function SchemaView() {
         author: formParams.author,
         url: formParams.url,
         date: new Date().toISOString()
+      };
+    } else if (kind === 'local_business') {
+      params = {
+        name: formParams.name,
+        addressStreet: formParams.addressStreet,
+        addressCity: formParams.addressCity,
+        addressZip: formParams.addressZip,
+        phone: formParams.phone,
+        latitude: formParams.latitude ? parseFloat(formParams.latitude) : undefined,
+        longitude: formParams.longitude ? parseFloat(formParams.longitude) : undefined,
+        priceRange: formParams.priceRange,
+        openingHours: formParams.openingHours
+      };
+    } else if (kind === 'faq') {
+      params = {
+        questions: faqPairs.map(f => f.question).filter(q => q.trim() !== ''),
+        answers: faqPairs.map(f => f.answer).filter(a => a.trim() !== '')
+      };
+    } else if (kind === 'breadcrumb') {
+      params = {
+        names: breadcrumbs.map(b => b.name).filter(n => n.trim() !== ''),
+        urls: breadcrumbs.map(b => b.url).filter(u => u.trim() !== '')
       };
     }
 
@@ -137,6 +163,9 @@ export default function SchemaView() {
                 <option value="order">OrderAction (Potential online order action)</option>
                 <option value="reservation">Reservation (Restaurant booking)</option>
                 <option value="discussion">DiscussionForumPosting (Forum community)</option>
+                <option value="local_business">LocalBusiness (Address &amp; Geocoordinates)</option>
+                <option value="faq">FAQPage (Q&amp;A List)</option>
+                <option value="breadcrumb">BreadcrumbList (Hierarchy Navigation)</option>
               </select>
             </div>
 
@@ -222,7 +251,172 @@ export default function SchemaView() {
               </>
             )}
 
-            <button type="submit" className="console-btn" disabled={loading}>
+            {/* Local Business Fields */}
+            {kind === 'local_business' && (
+              <>
+                <div className="form-row">
+                  <div className="input-group">
+                    <label>BUSINESS NAME</label>
+                    <input type="text" className="console-input" value={formParams.name} onChange={e => handleParamChange('name', e.target.value)} required />
+                  </div>
+                  <div className="input-group">
+                    <label>TELEPHONE</label>
+                    <input type="text" className="console-input" placeholder="e.g. +1-555-555-5555" value={formParams.phone} onChange={e => handleParamChange('phone', e.target.value)} />
+                  </div>
+                </div>
+                <div className="input-group">
+                  <label>STREET ADDRESS</label>
+                  <input type="text" className="console-input" placeholder="e.g. 1600 Amphitheatre Pkwy" value={formParams.addressStreet} onChange={e => handleParamChange('addressStreet', e.target.value)} />
+                </div>
+                <div className="form-row">
+                  <div className="input-group">
+                    <label>CITY / LOCALITY</label>
+                    <input type="text" className="console-input" placeholder="e.g. Mountain View" value={formParams.addressCity} onChange={e => handleParamChange('addressCity', e.target.value)} />
+                  </div>
+                  <div className="input-group">
+                    <label>POSTAL / ZIP CODE</label>
+                    <input type="text" className="console-input" placeholder="e.g. 94043" value={formParams.addressZip} onChange={e => handleParamChange('addressZip', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="input-group">
+                    <label>LATITUDE</label>
+                    <input type="number" step="any" className="console-input" placeholder="e.g. 37.422" value={formParams.latitude} onChange={e => handleParamChange('latitude', e.target.value)} />
+                  </div>
+                  <div className="input-group">
+                    <label>LONGITUDE</label>
+                    <input type="number" step="any" className="console-input" placeholder="e.g. -122.084" value={formParams.longitude} onChange={e => handleParamChange('longitude', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="input-group">
+                    <label>PRICE RANGE</label>
+                    <input type="text" className="console-input" placeholder="e.g. $$, $$$" value={formParams.priceRange} onChange={e => handleParamChange('priceRange', e.target.value)} />
+                  </div>
+                  <div className="input-group">
+                    <label>OPENING HOURS</label>
+                    <input type="text" className="console-input" placeholder="e.g. Mo-Fr 09:00-17:00" value={formParams.openingHours} onChange={e => handleParamChange('openingHours', e.target.value)} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* FAQ Fields */}
+            {kind === 'faq' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <label style={{ fontSize: '11px', color: 'var(--color-text-dim)', letterSpacing: '0.05em' }}>FAQ QUESTION & ANSWER LIST</label>
+                {faqPairs.map((pair, idx) => (
+                  <div key={idx} style={{ background: 'var(--bg-console)', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '4px', position: 'relative' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 'bold' }}>Q&A PAIR #{idx + 1}</span>
+                      {faqPairs.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setFaqPairs(prev => prev.filter((_, i) => i !== idx))}
+                          style={{ background: 'transparent', border: 'none', color: 'var(--neon-red)', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}
+                        >
+                          [REMOVE]
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <input
+                        type="text"
+                        className="console-input"
+                        placeholder="Question"
+                        value={pair.question}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFaqPairs(prev => prev.map((p, i) => i === idx ? { ...p, question: val } : p));
+                        }}
+                        required
+                      />
+                      <textarea
+                        className="console-input"
+                        placeholder="Answer text"
+                        rows={2}
+                        value={pair.answer}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFaqPairs(prev => prev.map((p, i) => i === idx ? { ...p, answer: val } : p));
+                        }}
+                        required
+                        style={{ resize: 'vertical' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setFaqPairs(prev => [...prev, { question: '', answer: '' }])}
+                  className="console-btn"
+                  style={{ background: 'transparent', border: '1px dashed var(--border-color)', color: 'var(--color-text-bright)', padding: '6px', fontSize: '11px', textTransform: 'uppercase' }}
+                >
+                  + Add Q&amp;A Pair
+                </button>
+              </div>
+            )}
+
+            {/* Breadcrumb Fields */}
+            {kind === 'breadcrumb' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <label style={{ fontSize: '11px', color: 'var(--color-text-dim)', letterSpacing: '0.05em' }}>BREADCRUMB STEPS HIERARCHY</label>
+                {breadcrumbs.map((b, idx) => (
+                  <div key={idx} style={{ background: 'var(--bg-console)', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--neon-cyan)', fontWeight: 'bold' }}>STEP #{idx + 1}</span>
+                      {breadcrumbs.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setBreadcrumbs(prev => prev.filter((_, i) => i !== idx))}
+                          style={{ background: 'transparent', border: 'none', color: 'var(--neon-red)', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}
+                        >
+                          [REMOVE]
+                        </button>
+                      )}
+                    </div>
+                    <div className="form-row">
+                      <div className="input-group">
+                        <input
+                          type="text"
+                          className="console-input"
+                          placeholder="Label (e.g. Products)"
+                          value={b.name}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBreadcrumbs(prev => prev.map((item, i) => i === idx ? { ...item, name: val } : item));
+                          }}
+                          required
+                        />
+                      </div>
+                      <div className="input-group">
+                        <input
+                          type="text"
+                          className="console-input"
+                          placeholder="URL Path (e.g. /products)"
+                          value={b.url}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBreadcrumbs(prev => prev.map((item, i) => i === idx ? { ...item, url: val } : item));
+                          }}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setBreadcrumbs(prev => [...prev, { name: '', url: '' }])}
+                  className="console-btn"
+                  style={{ background: 'transparent', border: '1px dashed var(--border-color)', color: 'var(--color-text-bright)', padding: '6px', fontSize: '11px', textTransform: 'uppercase' }}
+                >
+                  + Add Breadcrumb Step
+                </button>
+              </div>
+            )}
+
+            <button type="submit" className="console-btn" disabled={loading} style={{ marginTop: '16px' }}>
               <Play size={14} /> {loading ? 'GENERATING...' : 'GENERATE JSON-LD'}
             </button>
           </form>
